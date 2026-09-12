@@ -2,7 +2,7 @@
 
 **Two agents. One reproducible bug.**
 
-Milestone 2 adds a separate local control application. Loop Market remains intact, including all three original intentional defects. Live agents, GitHub, PR creation, merge, and deployment are not connected or implemented.
+Milestone 2 adds a separate local control application. Loop Market remains intact, including all three original intentional defects. Milestone 3 adds the separate Agent 1 integration described in [AGENT-1.md](AGENT-1.md). Live Agent 2, GitHub PR creation, merge, and deployment remain unimplemented. This guide retains the original developer-fixture workflow; the Agent 1 guide documents Docker, API-key setup, live investigation, and generated-candidate verification.
 
 ## PowerShell setup and startup
 
@@ -76,7 +76,7 @@ For each sample candidate:
 4. Approval records the reviewer, timestamp, exact candidate/base hashes, revision counter, requirements hash, and trusted harness hash.
 5. Replacing the candidate with another reviewed fixture invalidates prior approval. An on-disk edit to a frozen fixture is detected before execution and refused; unreviewed code is never executed.
 
-Approval permits testing only. No action approves, merges, or deploys code. The reserved Agent 1 and Agent 2 sections both say **Live agent not connected**.
+Approval permits testing only. No action approves, merges, or deploys code. Agent 1 now shows worker setup/readiness. Agent 2 says **Live agent not connected — scripted verification available**.
 
 ## Run actual baseline-versus-candidate verification
 
@@ -160,7 +160,7 @@ Original `npm.cmd test`, `npm.cmd run test:smoke`, and `npm.cmd run test:accepta
 
 Application copies follow the existing handoff allowlist: `src/`, `server/`, `public/`, package files, tsconfig, Vite config, index.html, .gitignore, and `INVESTIGATOR_SETUP.md` renamed to README.md. The main README, `operator/`, previous reports, controller files, test harness, and private credentials are excluded. The fixture-authoring recipe in `control/snapshots.ts` stays outside the copied application.
 
-**Separate folders and browser sessions are not a security sandbox for hostile code.** Only these reviewed, deterministic developer-authored fixtures may execute. Before connecting live agents, add an isolated execution environment and prevent generated code from accessing controller credentials, trusted tests, approvals, reports, or host resources. No arbitrary upload/patch-execution feature is provided here.
+**Separate folders and browser sessions are not a security sandbox.** This original host runner still executes only reviewed developer-authored fixtures. Agent-generated proposals have a separate Docker isolation gate and runner; they cannot enter this host execution path. See [the milestone-3 execution boundary](AGENT-1.md#isolation-design-and-limits). No arbitrary upload/patch-execution feature is provided.
 
 The marketplace's Vite configuration denies requests for `control/`, `operator/`, `verification/`, and `data/`, in addition to its usual sensitive-file exclusions. This keeps controller credentials and private notes from being exposed by the development file server. The watcher also ignores controller files. Marketplace addresses, commands, and application behavior are unchanged.
 

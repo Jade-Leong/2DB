@@ -47,6 +47,7 @@ async function refresh() {
     api("/test-summary"),
   ]);
   if (selected) selected = await api(`/proposals/${selected.id}`);
+  await refreshAgent();
   render();
 }
 function statusClass(s) {
@@ -85,8 +86,8 @@ ${
               )
               .join("")
           : '<div class="empty small">No submitted complaints yet.<br><br>Open Loop Market → Support, submit a complaint, then refresh this inbox.</div>'
-      }<div class="section-title proposals-title"><h2>Local proposals</h2><span>${proposals.length}</span></div>${proposals.map((x) => `<button class="proposal-link ${p?.id === x.id ? "chosen" : ""}" data-action="proposal" data-id="${x.id}"><strong>${x.kind === "discount-fix" ? "Discount sample fix" : "Unchanged negative control"}</strong><small>${esc(x.customer_name)} · ${short(x.candidate_revision)}</small>${badge(x.state)}</button>`).join("") || '<p class="muted small">Choose a ticket to create a developer-authored sample proposal.</p>'}</section><div class="detail-column">${t ? ticketView(t) : welcome()}${p ? proposalView(p) : t ? `<section class="panel"><span class="eyebrow">REVIEWED FIXTURES ONLY</span><h2>Create a local change proposal</h2><p class="muted">For a discount complaint, choose a developer-authored fixture. No agent has investigated this ticket.</p><div class="actions"><button data-action="create" data-kind="discount-fix" data-id="${esc(t.id)}">Use discount sample fix</button><button class="secondary" data-action="create" data-kind="unchanged" data-id="${esc(t.id)}">Use unchanged negative control</button></div></section>` : ""}<div class="agent-grid"><section class="panel agent"><span class="agent-number">01</span><h3>Agent 1 — Investigation and proposed fix</h3><p>Live agent not connected.</p><small>Current proposals are developer-authored fixtures.</small></section><section class="panel agent"><span class="agent-number">02</span><h3>Agent 2 — Independent verification</h3><p>Live agent not connected.</p><small>Playwright execution is scripted verification.</small></section></div>${testSummary ? `<details class="panel"><summary>Controller automated demonstration · explicit test-engineer session</summary><p class="muted small">Separate test tickets and controller data. These test approvals do not approve any dashboard proposal.</p><pre>${esc(JSON.stringify(testSummary, null, 2))}</pre></details>` : ""}</div></div>`
-}<footer>2DB · Local milestone 2 <span>No live agents · No GitHub · No merge or deployment</span></footer></div></div>`;
+      }<div class="section-title proposals-title"><h2>Local proposals</h2><span>${proposals.length}</span></div>${proposals.map((x) => `<button class="proposal-link ${p?.id === x.id ? "chosen" : ""}" data-action="proposal" data-id="${x.id}"><strong>${x.kind === "agent-generated" ? "Agent-generated proposal" : x.kind === "discount-fix" ? "Discount sample fix" : "Unchanged negative control"}</strong><small>${esc(x.customer_name)} · ${short(x.candidate_revision)}</small>${badge(x.state)}</button>`).join("") || '<p class="muted small">Choose a ticket to create a developer-authored sample proposal.</p>'}</section><div class="detail-column">${t ? ticketView(t) + agentView(t) : welcome()}${p ? proposalView(p) : t ? `<section class="panel"><span class="eyebrow">DEVELOPER-AUTHORED DEMO AREA</span><h2>Create a local change proposal</h2><p class="muted">These developer-authored fixtures are separate demonstrations. A failed live investigation never falls back to a fixture.</p><div class="actions"><button data-action="create" data-kind="discount-fix" data-id="${esc(t.id)}">Use discount sample fix</button><button class="secondary" data-action="create" data-kind="unchanged" data-id="${esc(t.id)}">Use unchanged negative control</button></div></section>` : ""}<div class="agent-grid"><section class="panel agent"><span class="agent-number">01</span><h3>Agent 1 — Investigation and proposed fix</h3><p>${agentStatus?.state === "Ready" ? "Live worker ready." : "Setup required for live investigation."}</p><small>Live investigation requires the configured isolated worker. Fixtures remain in the separate demo area.</small></section><section class="panel agent"><span class="agent-number">02</span><h3>Agent 2 — Independent verification</h3><p>Live agent not connected — scripted verification available.</p><small>Independent execution still requires engineer approval.</small></section></div>${testSummary ? `<details class="panel"><summary>Controller automated demonstration · explicit test-engineer session</summary><p class="muted small">Separate test tickets and controller data. These test approvals do not approve any dashboard proposal.</p><pre>${esc(JSON.stringify(testSummary, null, 2))}</pre></details>` : ""}</div></div>`
+}<footer>2DB · Local milestone 3 <span>Agent 1 gated by isolation · No live Agent 2 · No GitHub or deployment</span></footer></div></div>`;
 }
 function welcome() {
   return `<section class="panel welcome"><span class="eyebrow">REPRODUCE. REVIEW. VERIFY.</span><h2>One complaint.<br>A clear chain of evidence.</h2><p>Choose a submitted ticket to review its original words, inspect a real source diff, and approve an exact revision for local testing.</p><div class="steps"><span>1 &nbsp; Review proposal</span><span>2 &nbsp; Approve revision</span><span>3 &nbsp; Compare evidence</span></div></section>`;
@@ -99,7 +100,7 @@ function proposalView(p) {
     approval = p.approvals.find((a) => a.id === p.current_approval),
     waiting = p.state === "Awaiting engineer approval",
     running = p.state === "Verification running";
-  return `<section class="panel"><div class="section-title"><div><span class="eyebrow">LOCAL CHANGE PROPOSAL</span><h2>${p.kind === "discount-fix" ? "Discount payment correction" : "Unchanged negative control"}</h2></div>${badge(p.state)}</div><div class="author-label">Developer-authored sample · Revision ${p.revision_number}</div><p>${esc(p.explanation)}</p><div class="hash-grid">${hashLabel("BASE SNAPSHOT · SHA-256", p.base_revision)}${hashLabel("CANDIDATE SNAPSHOT · SHA-256", p.candidate_revision)}</div><details class="technical"><summary>Frozen requirements and harness identity</summary>${hashLabel("REQUIREMENTS", p.requirements_hash)}${hashLabel("TRUSTED HARNESS", p.harness_hash)}</details><div class="diff-title"><span>Source diff</span><span>server/index.ts · ${p.kind === "discount-fix" ? "1 line changed" : "0 changes"}</span></div><pre class="diff">${p.diff
+  return `<section class="panel"><div class="section-title"><div><span class="eyebrow">LOCAL CHANGE PROPOSAL</span><h2>${p.kind === "agent-generated" ? "Agent-generated proposed fix" : p.kind === "discount-fix" ? "Discount payment correction" : "Unchanged negative control"}</h2></div>${badge(p.state)}</div><div class="author-label">${esc(p.author)} · Revision ${p.revision_number}</div><p>${esc(p.explanation)}</p>${p.agentMetadata ? `<details><summary>Agent explanation, source references, and uncertainties</summary><p><strong>Expected behavior:</strong> ${esc(p.agentMetadata.expected)}</p><pre>${esc(JSON.stringify(p.agentMetadata.conclusion, null, 2))}</pre><p class="small muted">Agent explanation is not proof of correctness. Trusted reproduction evidence is available in the investigation panel above.</p></details>` : ""}<div class="hash-grid">${hashLabel("BASE SNAPSHOT · SHA-256", p.base_revision)}${hashLabel("CANDIDATE SNAPSHOT · SHA-256", p.candidate_revision)}</div><details class="technical"><summary>Frozen requirements and harness identity</summary>${hashLabel("REQUIREMENTS", p.requirements_hash)}${hashLabel("TRUSTED HARNESS", p.harness_hash)}</details><div class="diff-title"><span>Source diff</span><span>${p.kind === "agent-generated" ? "Controller-computed source diff" : "Reviewed developer fixture"}</span></div><pre class="diff">${p.diff
     .split("\n")
     .map(
       (line) =>
@@ -107,7 +108,7 @@ function proposalView(p) {
     )
     .join(
       "",
-    )}</pre><details><summary>Reproduction workflow</summary><p>Use Maya, add the $48 knit to the bag, enter LOOP20, then inspect the receipt and the server-recorded payment. Do not rely on the independently broken order-history page.</p><p class="small muted">${latest ? "Measured evidence appears below." : "No measured reproduction evidence yet. Approval allows the scripted baseline and candidate runs to gather it."}</p></details><div class="revision-tools"><label>Choose another reviewed fixture<select id="fixture" ${running ? "disabled" : ""}><option value="discount-fix" ${p.kind === "discount-fix" ? "selected" : ""}>Developer-authored discount fix</option><option value="unchanged" ${p.kind === "unchanged" ? "selected" : ""}>Unchanged negative control</option></select></label><button class="secondary" data-action="revision" ${running ? "disabled" : ""}>Replace candidate revision</button></div><p class="small muted">Changing the candidate invalidates approval and previous evidence for this proposal.</p></section><section class="panel gate"><span class="eyebrow">HUMAN APPROVAL GATE</span><h2>Your revision. Your decision.</h2><p class="muted">Testing permission is recorded against the full candidate hash above. It is not permission to merge or deploy.</p>${approval ? `<div class="approval-record">Approved by ${esc(approval.reviewer)} · ${date(approval.created_at)}<code>${esc(approval.revision)}</code></div>` : ""}<div class="actions">${["Proposal ready", "Changes requested"].includes(p.state) ? '<button data-action="submit">Submit revision for engineer approval</button>' : ""}<button data-action="approve" ${!waiting || busy ? "disabled" : ""}>Approve this revision for testing</button><button class="secondary" data-action="changes" ${running ? "disabled" : ""}>Request changes</button><button class="danger" data-action="reject" ${running ? "disabled" : ""}>Reject proposal</button></div><label class="review-note">Review note (optional)<textarea id="review-note" rows="2" maxlength="2000" placeholder="Explain a change request or rejection."></textarea></label><div class="verify-row"><div><strong>Baseline → Approved candidate</strong><p class="small muted">Serial builds and tests. Separate disposable copies and databases.</p></div><button data-action="verify" ${!approval || running || busy ? "disabled" : ""}>${running ? "Verification running…" : "Run scripted verification →"}</button></div><p class="small muted">Stop Loop Market with Ctrl+C before verification. Port 3001 must be free; 2DB remains running on its own port.</p></section>${evidenceView(p, latest)}<section class="panel"><div class="section-title"><h2>Activity history</h2><span class="small muted">Persisted timestamps</span></div><ol class="timeline">${p.activity.map((e) => `<li><span class="dot"></span><div><strong>${esc(e.event)}</strong><p>${esc(e.details)}</p><small>${esc(e.actor)} · ${date(e.created_at)}</small></div></li>`).join("")}</ol></section>`;
+    )}</pre><details ${p.kind === "agent-generated" ? "hidden" : ""}><summary>Reproduction workflow</summary><p>Use Maya, add the $48 knit to the bag, enter LOOP20, then inspect the receipt and the server-recorded payment. Do not rely on the independently broken order-history page.</p><p class="small muted">${latest ? "Measured evidence appears below." : "No measured reproduction evidence yet. Approval allows the scripted baseline and candidate runs to gather it."}</p></details><div class="revision-tools" ${p.kind === "agent-generated" ? "hidden" : ""}><label>Choose another reviewed fixture<select id="fixture" ${running ? "disabled" : ""}><option value="discount-fix" ${p.kind === "discount-fix" ? "selected" : ""}>Developer-authored discount fix</option><option value="unchanged" ${p.kind === "unchanged" ? "selected" : ""}>Unchanged negative control</option></select></label><button class="secondary" data-action="revision" ${running ? "disabled" : ""}>Replace candidate revision</button></div><p class="small muted">Changing the candidate invalidates approval and previous evidence for this proposal.</p></section><section class="panel gate"><span class="eyebrow">HUMAN APPROVAL GATE</span><h2>Your revision. Your decision.</h2><p class="muted">Testing permission is recorded against the full candidate hash above. It is not permission to merge or deploy.</p>${approval ? `<div class="approval-record">Approved by ${esc(approval.reviewer)} · ${date(approval.created_at)}<code>${esc(approval.revision)}</code></div>` : ""}<div class="actions">${["Proposal ready", "Changes requested"].includes(p.state) ? '<button data-action="submit">Submit revision for engineer approval</button>' : ""}<button data-action="approve" ${!waiting || busy ? "disabled" : ""}>Approve this revision for testing</button><button class="secondary" data-action="changes" ${running ? "disabled" : ""}>Request changes</button><button class="danger" data-action="reject" ${running ? "disabled" : ""}>Reject proposal</button></div><label class="review-note">Review note (optional)<textarea id="review-note" rows="2" maxlength="2000" placeholder="Explain a change request or rejection."></textarea></label><div class="verify-row"><div><strong>Baseline → Approved candidate</strong><p class="small muted">Serial builds and tests. Separate disposable copies and databases.</p></div><button data-action="verify" ${!approval || running || busy ? "disabled" : ""}>${running ? "Verification running…" : "Run scripted verification →"}</button></div><p class="small muted">Stop Loop Market with Ctrl+C before verification. Port 3001 must be free; 2DB remains running on its own port.</p></section>${evidenceView(p, latest)}<section class="panel"><div class="section-title"><h2>Activity history</h2><span class="small muted">Persisted timestamps</span></div><ol class="timeline">${p.activity.map((e) => `<li><span class="dot"></span><div><strong>${esc(e.event)}</strong><p>${esc(e.details)}</p><small>${esc(e.actor)} · ${date(e.created_at)}</small></div></li>`).join("")}</ol></section>`;
 }
 function evidenceView(p, run) {
   const current =
@@ -196,15 +197,31 @@ root.addEventListener("click", async (event) => {
     else if (action === "ticket") {
       selected = null;
       ticket = allTickets().find((t) => t.id === el.dataset.id);
+      await refreshAgent();
     } else if (action === "proposal") {
       selected = await api("/proposals/" + el.dataset.id);
       ticket = null;
+      await refreshAgent();
     } else if (action === "create") {
       selected = await api("/proposals", {
         ticketId: el.dataset.id,
         kind: el.dataset.kind,
       });
       ticket = null;
+      await refresh();
+    } else if (action === "investigate") {
+      busy = true;
+      render();
+      investigation = await api(
+        "/tickets/" + el.dataset.id + "/investigate",
+        {},
+      );
+      await refresh();
+    } else if (action === "cancel-investigation") {
+      investigation = await api(
+        "/investigations/" + el.dataset.id + "/cancel",
+        {},
+      );
       await refresh();
     } else if (selected) {
       const id = selected.id;
@@ -232,6 +249,7 @@ root.addEventListener("click", async (event) => {
   } catch (e) {
     error = e.message;
   }
+  busy = false;
   render();
 });
 render();
@@ -240,7 +258,11 @@ refresh().catch((e) => {
   render();
 });
 setInterval(() => {
-  if (token && selected?.state === "Verification running")
+  if (
+    token &&
+    (selected?.state === "Verification running" ||
+      investigations.some((r) => !r.finished_at))
+  )
     refresh().catch((e) => {
       error = e.message;
       render();

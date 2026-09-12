@@ -8,7 +8,12 @@ const root = process.env.TWO_DB_APP_ROOT || harnessRoot;
 export function reset() {
   execFileSync(
     process.execPath,
-    [path.join(harnessRoot, "node_modules/tsx/dist/cli.mjs"), "server/reset.ts"],
+    [
+      path.join(harnessRoot, "node_modules/tsx/dist/cli.mjs"),
+      process.env.TWO_DB_ISOLATED === "1"
+        ? path.join(harnessRoot, "seed/server/reset.ts")
+        : "server/reset.ts",
+    ],
     { cwd: root, env: { ...process.env, LOOP_TEST: "1" } },
   );
 }
@@ -46,5 +51,5 @@ export async function bagToCheckout(page: Page) {
 export const photo = {
   name: "customer-photo.png",
   mimeType: "image/png",
-  buffer: readFileSync(new URL('./fixtures/seller-photo.png', import.meta.url)),
+  buffer: readFileSync(new URL("./fixtures/seller-photo.png", import.meta.url)),
 };

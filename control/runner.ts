@@ -107,6 +107,7 @@ async function execute(
 }
 export class Runner {
   active = false;
+  isolatedImage?: string;
   constructor(public store: Store) {}
   async start(proposalId: string) {
     if (this.active)
@@ -117,6 +118,18 @@ export class Runner {
     const p = this.store.proposal(proposalId),
       approval = this.store.approvalFor(p);
     this.active = true;
+    if (p.kind === "agent-generated") {
+      try {
+        const { probeIsolation } = await import("./agent/docker");
+        const readiness = await probeIsolation();
+        if (!readiness.ready || !readiness.image)
+          problem("Setup required: " + readiness.message, 409);
+        this.isolatedImage = readiness.image;
+      } catch (e) {
+        this.active = false;
+        throw e;
+      }
+    } else this.isolatedImage = undefined;
     if (!(await portAvailable(3001))) {
       this.active = false;
       this.store.event(
@@ -198,6 +211,21 @@ export class Runner {
     source: string,
     expectedRevision: string,
   ) {
+    if (this.store.proposal(run.proposal_id).kind === "agent-generated") {
+      if (!this.isolatedImage)
+        throw new Error(
+          "Generated code requires an isolated runner. Host execution refused.",
+        );
+      const { isolatedEnvironment } = await import("./agent/verification");
+      return isolatedEnvironment(
+        this.store,
+        this.isolatedImage,
+        run,
+        label,
+        source,
+        expectedRevision,
+      );
+    }
     const root = path.join(this.store.dataDir, "workspaces", run.id, label),
       evidenceRoot = path.join(this.store.dataDir, "runs", run.id, label);
     copySnapshot(source, root);
@@ -301,13 +329,18 @@ export class Runner {
         .prepare("SELECT * FROM runs WHERE id=?")
         .get(id) as any,
       p = this.store.proposal(run.proposal_id),
-      f = selectedFixture(this.store.fixtures, p.kind);
+      f =
+        p.kind === "agent-generated"
+          ? { root: this.store.agentCandidate(p.id).candidate_root }
+          : selectedFixture(this.store.fixtures, p.kind);
     const evidence: any = { integrityVerified: false };
-    assertFixtures(this.store.fixtures);
+    this.store.checkCurrent(p);
     evidence.baseline = await this.environment(
       run,
       "baseline",
-      this.store.fixtures.base.root,
+      p.kind === "agent-generated"
+        ? this.store.agentCandidate(p.id).base_root
+        : this.store.fixtures.base.root,
       run.base_revision,
     );
     // Always use a new copy and database, even for the unchanged negative control.
@@ -317,7 +350,7 @@ export class Runner {
       f.root,
       run.candidate_revision,
     );
-    assertFixtures(this.store.fixtures);
+    this.store.checkCurrent(this.store.proposal(p.id));
     evidence.integrityVerified =
       evidence.baseline.sourceUnchanged &&
       evidence.candidate.sourceUnchanged &&

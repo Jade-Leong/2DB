@@ -12,16 +12,21 @@ import { Store } from "./store";
 import { Runner } from "./runner";
 import { controlRoot, defaultData, problem } from "./paths";
 import type { FixtureKind } from "./snapshots";
+import { AgentService, setupStatus } from "./agent/service";
 
 export function createControl(
   options: {
     dataDir?: string;
     privateDir?: string;
     ticketSource?: string;
+    agentStatus?: typeof setupStatus;
   } = {},
 ) {
   const store = new Store(options.dataDir ?? defaultData, options.ticketSource),
     runner = new Runner(store);
+  const agent = new AgentService(store, options.agentStatus);
+  let statusCache:
+    { at: number; value: Awaited<ReturnType<typeof setupStatus>> } | undefined;
   const privateDir = options.privateDir ?? path.join(controlRoot, "private");
   mkdirSync(privateDir, { recursive: true });
   const keyFile = path.join(privateDir, "engineer-key.json");
@@ -100,6 +105,28 @@ export function createControl(
     res.json({ reviewer: "Local engineer", active: runner.active }),
   );
   app.get("/engineer-api/inbox", (_req, res) => res.json(store.inbox()));
+  app.get("/engineer-api/agent/status", async (_req, res) => {
+    if (!statusCache || Date.now() - statusCache.at > 30_000)
+      statusCache = { at: Date.now(), value: await agent.statusCheck() };
+    res.json(statusCache.value);
+  });
+  app.get("/engineer-api/investigations", (_req, res) =>
+    res.json(agent.list()),
+  );
+  app.get("/engineer-api/investigations/:id", (req, res) =>
+    res.json(agent.get(String(req.params.id))),
+  );
+  app.post("/engineer-api/tickets/:id/investigate", async (req, res) =>
+    res.status(202).json(await agent.start(String(req.params.id))),
+  );
+  app.post("/engineer-api/investigations/:id/cancel", (req, res) =>
+    res.json(agent.cancel(String(req.params.id))),
+  );
+  app.get("/engineer-api/investigations/:id/evidence/:name", (req, res) =>
+    res.sendFile(
+      agent.artifact(String(req.params.id), String(req.params.name)),
+    ),
+  );
   app.get("/engineer-api/tickets", (_req, res) =>
     res.json(
       store.db.prepare("SELECT * FROM tickets ORDER BY imported_at DESC").all(),
@@ -231,13 +258,11 @@ export function createControl(
       res: express.Response,
       _next: express.NextFunction,
     ) =>
-      res
-        .status(err.status ?? 500)
-        .json({
-          error: err.status
-            ? err.message
-            : "Controller operation failed. See the local terminal.",
-        }),
+      res.status(err.status ?? 500).json({
+        error: err.status
+          ? err.message
+          : "Controller operation failed. See the local terminal.",
+      }),
   );
-  return { app, store, runner, keyFile };
+  return { app, store, runner, agent, keyFile };
 }

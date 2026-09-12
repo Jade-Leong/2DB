@@ -143,6 +143,7 @@ export function harnessRevision() {
     "control/runner.ts",
   ])
     entries.push(p);
+  visit(projectRoot, "control/agent", entries);
   return hash(
     JSON.stringify(
       entries

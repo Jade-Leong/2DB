@@ -1,1 +1,19 @@
-{"compilerOptions":{"target":"ES2022","lib":["ES2022","DOM"],"module":"ESNext","moduleResolution":"Bundler","strict":true,"esModuleInterop":true,"skipLibCheck":true,"noEmit":true,"types":["node"]},"include":["*.ts","tests/**/*.ts","../verification/**/*.ts"]}
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": [
+    "*.ts",
+    "agent/**/*.ts",
+    "tests/**/*.ts",
+    "../verification/**/*.ts"
+  ]
+}

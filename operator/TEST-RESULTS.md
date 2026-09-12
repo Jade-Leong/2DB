@@ -26,3 +26,6 @@ An initial attempt could not launch UI tests because the installed Playwright pa
 Final visual review uses `screenshots/home-desktop.png` and `screenshots/home-mobile.png`. Payment-failure screenshots and full traces are retained by Playwright in the root `test-results/` directory; the HTML report is in `playwright-report/`. These artifacts are private operator evidence, not investigator handoff material.
 
 Final combined suite completed in 56.3 seconds. After that run, fonts were changed from a remote stylesheet to local Fontsource packages; the production build was rerun successfully. The running development site was then captured at 1440px and 390px widths: no page/console errors and no horizontal overflow. The behavioral suite was not repeated for this font-only change. Manual `npm.cmd run reset` succeeded and the development server was started with fresh local seed data at http://127.0.0.1:5173.
+# Later milestones
+
+The original marketplace results below are preserved. See [milestone 2](MILESTONE-2-RESULTS.md) for the engineer dashboard and [milestone 3](MILESTONE-3-RESULTS.md) for Agent 1 integration, automated checks, and explicit live-run setup blockers.

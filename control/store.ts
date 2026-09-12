@@ -10,6 +10,7 @@ import {
   harnessRevision,
   hash,
   type FixtureKind,
+  revision,
 } from "./snapshots";
 import { discountRequirements } from "../verification/discount-contract";
 
@@ -191,7 +192,17 @@ export class Store {
   }
   checkCurrent(p: any) {
     try {
-      assertFixtures(this.fixtures);
+      if (p.kind === "agent-generated") {
+        const c = this.agentCandidate(p.id);
+        if (
+          revision(c.base_root) !== p.base_revision ||
+          revision(c.candidate_root) !== p.candidate_revision
+        )
+          problem(
+            "Agent candidate bytes changed. Previous approval is invalid; start a new investigation.",
+            409,
+          );
+      } else assertFixtures(this.fixtures);
     } catch (e) {
       if (p.current_approval)
         this.invalidate(
@@ -212,12 +223,18 @@ export class Store {
       );
     }
     if (
+      p.kind !== "agent-generated" &&
       selectedFixture(this.fixtures, p.kind).revision !== p.candidate_revision
     )
       problem("Candidate identity does not match the trusted fixture.", 409);
   }
   change(id: string, kind: FixtureKind) {
     const p = this.proposal(id);
+    if (p.kind === "agent-generated")
+      problem(
+        "Agent proposals cannot be replaced with a fixture. Request changes and start a fresh investigation.",
+        409,
+      );
     if (p.state === "Verification running")
       problem(
         "Wait for this verification to finish before changing the revision.",
@@ -381,7 +398,16 @@ export class Store {
         "Paid order missing from order history",
         "Uploaded listing photo does not persist",
       ],
-      author: "Developer-authored sample",
+      author:
+        p.kind === "agent-generated"
+          ? "Agent-generated"
+          : "Developer-authored sample",
+      investigation:
+        p.kind === "agent-generated" ? this.agentCandidate(id).run_id : null,
+      agentMetadata:
+        p.kind === "agent-generated"
+          ? JSON.parse(this.agentCandidate(id).evidence)
+          : null,
       execution: "Scripted Playwright verification",
     };
   }
@@ -392,6 +418,20 @@ export class Store {
       )
       .all()
       .map((p: any) => ({ ...p, requirements: JSON.parse(p.requirements) }));
+  }
+  agentCandidate(id: string): any {
+    const c = this.db
+      .prepare("SELECT * FROM agent_candidates WHERE proposal_id=?")
+      .get(id) as any;
+    if (!c || !/^[a-f0-9-]{36}$/.test(c.run_id))
+      problem("Agent candidate not found.", 409);
+    const root = path.join(this.dataDir, "investigations", c.run_id);
+    if (
+      c.base_root !== path.join(root, "baseline") ||
+      c.candidate_root !== path.join(root, "candidate")
+    )
+      problem("Agent candidate location does not match its run.", 409);
+    return c;
   }
   close() {
     this.db.close();

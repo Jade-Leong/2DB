@@ -1008,3 +1008,9 @@ footer {
     display: none;
   }
 }
+ [hidden] { display: none !important; }
+ .setup-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:20px 0; }
+ .setup-grid > div { border:1px solid #e4e6eb; border-radius:12px; padding:16px; min-width:0; }
+ .setup-grid strong { display:block; text-transform:capitalize; margin-bottom:10px; }
+ .live-agent pre { max-height:260px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
+ @media(max-width:650px) { .setup-grid { grid-template-columns:1fr; } }

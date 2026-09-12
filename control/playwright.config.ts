@@ -30,12 +30,15 @@ export default defineConfig({
       grep: /history:|photo:/,
     },
   ],
-  webServer: {
-    command: `"${process.execPath}" "${path.join(projectRoot, "node_modules/tsx/dist/cli.mjs")}" server/index.ts`,
-    cwd: appRoot,
-    url: "http://127.0.0.1:3001/api/health",
-    reuseExistingServer: false,
-    env: { LOOP_TEST: "1" },
-    timeout: 30000,
-  },
+  webServer:
+    process.env.TWO_DB_ISOLATED === "1"
+      ? undefined
+      : {
+          command: `"${process.execPath}" "${path.join(projectRoot, "node_modules/tsx/dist/cli.mjs")}" server/index.ts`,
+          cwd: appRoot,
+          url: "http://127.0.0.1:3001/api/health",
+          reuseExistingServer: false,
+          env: { LOOP_TEST: "1" },
+          timeout: 30000,
+        },
 });

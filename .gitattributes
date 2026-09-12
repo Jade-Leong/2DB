@@ -1,0 +1,2 @@
+# Preserve exact source bytes used by the independent snapshot verification.
+* -text

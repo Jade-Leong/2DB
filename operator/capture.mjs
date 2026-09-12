@@ -1,0 +1,17 @@
+import {chromium} from '@playwright/test';
+import {mkdirSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+const browser=await chromium.launch();
+const page=await browser.newPage({viewport:{width:1440,height:1000}});
+const errors=[];
+page.on('pageerror',e=>errors.push(e.message));
+page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
+await page.goto('http://127.0.0.1:5173');
+await page.locator('.product-card').last().waitFor();
+await page.evaluate(async()=>{await document.fonts.ready;await Promise.all([...document.images].map(i=>i.decode().catch(()=>{})));});
+mkdirSync(new URL('./screenshots/',import.meta.url),{recursive:true});
+await page.screenshot({path:fileURLToPath(new URL('./screenshots/home-desktop.png',import.meta.url)),fullPage:true});
+await page.setViewportSize({width:390,height:844});
+await page.screenshot({path:fileURLToPath(new URL('./screenshots/home-mobile.png',import.meta.url)),fullPage:true});
+console.log(JSON.stringify({pageErrors:errors,viewportFits:await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)},null,2));
+await browser.close();

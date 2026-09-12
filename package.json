@@ -20,9 +20,11 @@
     "control:test": "node --import tsx --test --test-concurrency=1 control/tests/controller.test.ts",
     "control:agent:status": "tsx control/agent/cli.ts status",
     "control:agent:prepare": "tsx control/agent/cli.ts prepare",
-    "control:agent:test": "node --import tsx --test --test-concurrency=1 control/tests/agent.test.ts"
+    "control:agent:test": "node --import tsx --test --test-concurrency=1 control/tests/agent.test.ts",
+    "test:support": "node --import tsx --test verification/voice-api.test.ts && playwright test --project=support"
   },
   "dependencies": {
+    "@elevenlabs/client": "^1.25.0",
     "@fontsource-variable/dm-sans": "^5.3.0",
     "@fontsource-variable/manrope": "^5.3.0",
     "@openai/codex-sdk": "0.154.0",

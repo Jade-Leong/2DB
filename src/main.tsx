@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
+import { Support } from "./support";
 
 type Account = { id: string; name: string; role: string; shop: string | null };
 type Product = {
@@ -869,64 +870,11 @@ function App() {
           </>
         )}
         {route === "/support" && (
-          <>
-            {title(
-              "WE’RE HERE FOR THE LITTLE THINGS",
-              "Let’s sort it out.",
-              "Tell us what happened. Your complaint will be saved in this local demo.",
-            )}
-            <form
-              className="panel support-form"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const form = e.currentTarget,
-                  data = new FormData(form);
-                setBusy(true);
-                setError("");
-                try {
-                  const result = await api<{ id: string }>(
-                    "/support",
-                    body({
-                      subject: data.get("subject"),
-                      message: data.get("message"),
-                    }),
-                  );
-                  setNotice(`Support ticket saved. Reference: ${result.id}`);
-                  form.reset();
-                } catch (e) {
-                  setError((e as Error).message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              <p className="muted">Submitting as {account?.name}</p>
-              <label>
-                Subject
-                <input
-                  name="subject"
-                  required
-                  maxLength={150}
-                  placeholder="What can we help with?"
-                />
-              </label>
-              <label>
-                What happened?
-                <textarea
-                  name="message"
-                  required
-                  maxLength={5000}
-                  rows={6}
-                  placeholder="Include your order reference or listing name if you have one."
-                />
-              </label>
-              <p className="small muted">
-                Please use fictional information. This demo does not send
-                messages to a support team.
-              </p>
-              <button disabled={busy}>Submit complaint</button>
-            </form>
-          </>
+          <Support
+            key={accountId}
+            accountId={accountId}
+            accountName={account?.name ?? "your demo account"}
+          />
         )}
       </main>
       <footer>

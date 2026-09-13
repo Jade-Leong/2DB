@@ -24,7 +24,7 @@ Create a GitHub App named **2DB Bridge** with repository **Contents: Read and wr
 https://YOUR-2DB-HOST/engineer-api/github/callback
 ```
 
-2DB starts user authorization explicitly, so connecting an account works whether the App is already installed or still needs repository access. The optional post-install **Setup URL** can point to `https://twodb-steel.vercel.app/control/`; it is separate from the OAuth callback. See GitHub's [App registration settings](https://docs.github.com/en/apps/maintaining-github-apps/modifying-a-github-app-registration).
+Leave **Request user authorization (OAuth) during installation** disabled. 2DB starts user authorization explicitly, so connecting an account works whether the App is already installed or still needs repository access. Set the optional post-install **Setup URL** to `https://twodb-steel.vercel.app/control/`; it is separate from the OAuth callback. See GitHub's [App registration settings](https://docs.github.com/en/apps/maintaining-github-apps/modifying-a-github-app-registration).
 
 Set these values only in the controller's private production environment:
 

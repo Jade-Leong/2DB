@@ -17,7 +17,7 @@ const config: GitHubConfig = {
 test("GitHub account authorization and App installation use separate URLs", () => {
   assert.equal(
     authorizationUrl(config, "single-use state"),
-    "https://github.com/login/oauth/authorize?client_id=Iv1.test%20client&state=single-use%20state",
+    "https://github.com/login/oauth/authorize?client_id=Iv1.test%20client&state=single-use%20state&redirect_uri=https%3A%2F%2Fcontroller.example.com%2Fengineer-api%2Fgithub%2Fcallback",
   );
   assert.equal(
     installUrl(config),

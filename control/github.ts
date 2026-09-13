@@ -58,7 +58,8 @@ export function decrypt(config: GitHubConfig, ciphertext: string): string {
 }
 
 export function authorizationUrl(config: GitHubConfig, state: string): string {
-  return `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(config.clientId)}&state=${encodeURIComponent(state)}`;
+  const callback = `${config.publicUrl}/engineer-api/github/callback`;
+  return `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(config.clientId)}&state=${encodeURIComponent(state)}&redirect_uri=${encodeURIComponent(callback)}`;
 }
 
 export function installUrl(config: GitHubConfig): string {

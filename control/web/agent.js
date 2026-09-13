@@ -30,7 +30,7 @@ function sourceCard(source, citation = null) {
     return "";
   }
   if (url.protocol !== "https:" || url.username || url.password) return "";
-  return `<article class="research-source"><div class="section-title"><span class="eyebrow">${esc(source.id)} · ${source.stage === "extract" ? "EXTRACTED DOCUMENTATION" : "SEARCH RESULT"}</span>${citation ? badge(citation.relationship) : ""}</div><a href="${esc(url.href)}" target="_blank" rel="noopener noreferrer">${esc(source.title)} ↗</a><p class="small muted">${esc(url.hostname)}</p>${citation ? `<blockquote>${esc(citation.quote)}</blockquote><p><strong>Agent assessment:</strong> ${esc(citation.relevance)}</p>` : `<details><summary>Read retrieved excerpt</summary><p class="research-excerpt">${esc(source.content)}</p></details>`}</article>`;
+  return `<article class="research-source"><div class="section-title"><span class="eyebrow">${citation ? "WEB SOURCE · VERIFIED VIA TAVILY" : `${esc(source.id)} · ${source.stage === "extract" ? "EXTRACTED DOCUMENTATION" : "SEARCH RESULT"}`}</span>${citation ? badge(citation.relationship) : ""}</div><a href="${esc(url.href)}" target="_blank" rel="noopener noreferrer">${esc(source.title)} ↗</a><p class="small muted">${esc(url.hostname)}</p>${citation ? `<blockquote>${esc(citation.quote)}</blockquote><p><strong>How this informed the diagnosis:</strong> ${esc(citation.relevance)}</p>` : `<details><summary>Read retrieved excerpt</summary><p class="research-excerpt">${esc(source.content)}</p></details>`}</article>`;
 }
 function researchRecordsView(records) {
   return records
@@ -48,8 +48,8 @@ function researchPanel() {
   return `<details class="research-panel"><summary>Research findings (${records.length})</summary>${researchRecordsView(records)}</details>`;
 }
 function researchCitationsView(research) {
-  if (!research) return "";
-  return `<section class="panel research-panel"><span class="eyebrow">TAVILY · CONTRIBUTION TO THIS PROPOSAL</span><h2>Why these sources matter.</h2><p>${esc(research.summary)}</p>${research.citations.map((c) => sourceCard(c, c)).join("")}<p class="small muted">Excerpts are checked against retrieved content. Relevance is the agent's assessment; independent tests determine whether the change works.</p></section>`;
+  if (!research?.citations?.length) return "";
+  return `<aside class="panel research-panel"><h3>Supporting evidence</h3><p>${esc(research.summary)}</p>${research.citations.map((c) => sourceCard(c, c)).join("")}<p class="small muted">Public documentation supports the diagnosis. Independent browser and payment checks determine whether the change works.</p></aside>`;
 }
 
 function ticketAgentActivity(t) {

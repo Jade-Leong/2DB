@@ -24,6 +24,12 @@ for(const scenario of scenarios) test(`workspace ${scenario}: truthful actions, 
   if(scenario==='completed') {await page.getByRole('button',{name:'Review and approve →'}).click();assert.equal(await page.getByRole('button',{name:'Approve',exact:true}).isVisible(),true);}
   if(scenario==='approved-queue') {await page.getByRole('button',{name:'Approved',exact:true}).click();assert.equal(await page.locator('.ticket').count(),1);assert.match(await page.locator('.next-heading').innerText(),/Approved for human PR work/);}
   if (await page.locator('[data-agent-detail="build"]').getAttribute('open') === null) await page.locator('[data-agent-detail="build"] > summary').click();
+  if(!['idle','running'].includes(scenario)) {
+   assert.equal(await page.getByRole('heading',{name:'Supporting evidence',exact:true}).count(),1);
+   assert.match(await page.locator('.research-source').innerText(),/WEB SOURCE · VERIFIED VIA TAVILY/);
+   assert.equal(await page.getByText('No external documentation consulted.',{exact:true}).count(),0);
+   assert.equal(await page.getByText('TAVILY · CONTRIBUTION TO THIS PROPOSAL',{exact:true}).count(),0);
+  }
   await page.locator('[data-agent-detail="verify"] > summary').click();
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.screenshot({path:`${artifacts}/${scenario}-desktop.png`,fullPage:true});

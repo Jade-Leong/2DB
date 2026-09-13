@@ -17,7 +17,7 @@ async function start(config) {
     mkdirSync(root+'/control/private',{recursive:true});
     const file=root+'/control/private/engineer-key.json';
     if(!existsSync(file))writeFileSync(file,JSON.stringify({key:config.engineerKey}),{mode:0o600});
-    controller=spawn(process.execPath,['--import','tsx','control/index.ts'],{cwd:root,env:{...cleanEnv,...databaseEnv,...accountEnv,TWO_DB_OPENAI_API_KEY:config.apiKey,TWO_DB_AGENT_MODEL:config.model},stdio:'ignore'});
+    controller=spawn(process.execPath,['--import','tsx','control/index.ts'],{cwd:root,env:{...cleanEnv,...databaseEnv,...accountEnv,TWO_DB_OPENAI_API_KEY:config.apiKey,TWO_DB_TAVILY_API_KEY:config.tavilyApiKey||'',TWO_DB_AGENT_MODEL:config.model},stdio:'ignore'});
   }
   for(let i=0;i<100;i++) {
     const ready=await Promise.all([3003,3002].map(p=>fetch(`http://127.0.0.1:${p}/${p===3003?'api/health':'health'}`).then(r=>r.ok).catch(()=>false)));

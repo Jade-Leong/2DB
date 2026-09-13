@@ -21,7 +21,9 @@
     "control:agent:status": "tsx control/agent/cli.ts status",
     "control:agent:prepare": "tsx control/agent/cli.ts prepare",
     "control:agent:test": "node --import tsx --test --test-concurrency=1 control/tests/agent.test.ts",
-    "test:support": "node --import tsx --test verification/voice-api.test.ts && playwright test --project=support"
+    "test:support": "node --import tsx --test verification/voice-api.test.ts && playwright test --project=support",
+    "supabase:check": "node scripts/supabase.mjs check",
+    "supabase:setup": "node scripts/supabase.mjs setup"
   },
   "dependencies": {
     "@elevenlabs/client": "^1.25.0",
@@ -30,6 +32,7 @@
     "@openai/codex-sdk": "0.154.0",
     "express": "^5.1.0",
     "multer": "^2.0.2",
+    "pg": "^8.23.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "sharp": "^0.35.4"
@@ -39,6 +42,7 @@
     "@types/express": "^5.0.3",
     "@types/multer": "^2.0.0",
     "@types/node": "^24.0.0",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^5.0.0",

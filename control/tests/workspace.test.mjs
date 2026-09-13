@@ -89,3 +89,17 @@ test('unread filter hides opened tickets and All restores them',async()=>{
   assert.equal(await page.locator('.ticket.chosen.is-read').count(),1);
  }finally{await page.close();}
 });
+test('backend recovery never shows connected and offline at the same time',async()=>{
+ fixture.setScenario('idle');fixture.setHealth(true);const page=await browser.newPage({viewport:{width:1280,height:900},reducedMotion:'reduce'});
+ try {
+  await page.goto(origin);await page.locator('.ticket').first().click();await page.getByText('Agent backend connected',{exact:true}).waitFor();
+  fixture.setHealth(false);
+  await page.evaluate(()=>refresh().catch(e=>{error=e.message;render();}));
+  assert.equal(await page.getByText('Agent backend connected',{exact:true}).count(),0);
+  assert.equal(await page.getByText('Agent backend is offline. Start the local 2DB runtime to continue.',{exact:true}).count(),2);
+  fixture.setHealth(true);
+  await page.evaluate(()=>refresh().catch(e=>{error=e.message;render();}));
+  assert.equal(await page.getByText('Agent backend connected',{exact:true}).count(),1);
+  assert.equal(await page.getByText('Agent backend is offline. Start the local 2DB runtime to continue.',{exact:true}).count(),0);
+ }finally{fixture.setHealth(true);await page.close();}
+});

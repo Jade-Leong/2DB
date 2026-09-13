@@ -17,11 +17,12 @@ export function fixtureData(scenario = 'idle') {
   return {tickets,run,p};
 }
 export function createFixtureServer(initial='idle', showBanner=false) {
-  let scenario=initial;
+  let scenario=initial, health=true;
   const requests=[];
   const server=http.createServer((req,res)=>{
     const url=new URL(req.url,'http://localhost');
     const respond=(data,status=200)=>{res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(data));};
+    if(url.pathname==='/api/health') return respond(health?{ok:true,app:'2DB'}:{error:'offline'},health?200:503);
     if(url.pathname.startsWith('/engineer-api/') || url.pathname.startsWith('/auth-api/')) {
       requests.push({method:req.method,path:url.pathname});
       const {tickets,run,p}=fixtureData(scenario);
@@ -37,7 +38,7 @@ export function createFixtureServer(initial='idle', showBanner=false) {
     if(name==='index.html') content=content.toString().replace('<div id="app">',`<script>sessionStorage.setItem('2db-engineer-session','isolated-ui-fixture');</script>${showBanner?`<div style="padding:12px;color:#dfc38a;font:13px monospace">UI PREVIEW · isolated sample data · no live agents ${scenarios.map(s=>`<a style="color:#a8d5b5;margin-left:12px" href="/?scenario=${s}">${s}</a>`).join('')}</div>`:''}<div id="app">`);
     res.setHeader('content-type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':name.endsWith('.svg')?'image/svg+xml':'text/html');res.end(content);
   });
-  return {server,requests,setScenario(value){scenario=value;}};
+  return {server,requests,setScenario(value){scenario=value;},setHealth(value){health=value;}};
 }
 if(process.argv[1]===fileURLToPath(import.meta.url)) {
  const {server}=createFixtureServer('proposal-ready',true);

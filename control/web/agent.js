@@ -10,7 +10,14 @@ let backendStatus = "offline";
 async function refreshAgent() {
   const target = selected?.ticket_id || ticket?.id, session = token;
   backendStatus = await fetch(window.twoDbBackendUrl("/api/health"), { signal: AbortSignal.timeout(12000) }).then(r => r.ok ? "connected" : "offline").catch(() => "offline");
-  const values = await Promise.all([api("/agent/status"), api("/agent2/status"), api("/investigations"), api("/scripted-investigations"), api("/research/status")]);
+  if (backendStatus !== "connected") throw new Error("Agent backend is offline. Start the local 2DB runtime to continue.");
+  let values;
+  try {
+    values = await Promise.all([api("/agent/status"), api("/agent2/status"), api("/investigations"), api("/scripted-investigations"), api("/research/status")]);
+  } catch (cause) {
+    backendStatus = "offline";
+    throw cause;
+  }
   const latest = values[2].find(r => r.ticket_id === target);
   const detail = latest ? await api("/investigations/" + latest.id) : null;
   if (token !== session || (selected?.ticket_id || ticket?.id) !== target) return;

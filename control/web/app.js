@@ -81,6 +81,7 @@ async function refresh() {
     selected = updated;
   }
   await refreshAgent();
+  if (error === "Agent backend is offline. Start the local 2DB runtime to continue.") error = "";
   render();
 }
 function statusClass(s) {

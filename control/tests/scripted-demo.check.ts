@@ -29,7 +29,10 @@ database
 database.close();
 
 const store = new Store(path.join(root, "controller"), tickets);
-const service = new ScriptedDemoService(store);
+let automaticallyStarted = "";
+const service = new ScriptedDemoService(store, undefined, (proposalId) => {
+  automaticallyStarted = proposalId;
+});
 try {
   const started = await service.start("discount-check", "discount-fix");
   let finished = service.get(started.id);
@@ -43,6 +46,9 @@ try {
   assert.equal(finished.evidence[0].orderCents, 3840);
   assert.equal(finished.evidence[0].paymentCents, 4800);
   const proposal = store.detail(finished.proposal_id);
+  for (let i = 0; i < 50 && !automaticallyStarted; i++)
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(automaticallyStarted, proposal.id);
   assert.equal(proposal.state, "Ready for Agent 2");
   assert.equal(
     proposal.investigationOrigin,

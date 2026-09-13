@@ -97,6 +97,7 @@ export class AgentService {
   constructor(
     public store: Store,
     public statusCheck = setupStatus,
+    public proposalReady?: (proposalId: string) => Promise<unknown> | unknown,
   ) {
     store.db
       .exec(`CREATE TABLE IF NOT EXISTS investigations(id TEXT PRIMARY KEY,ticket_id TEXT NOT NULL REFERENCES tickets(id),state TEXT NOT NULL,thread_id TEXT,started_at TEXT NOT NULL,finished_at TEXT,base_revision TEXT,candidate_revision TEXT,proposal_id TEXT,events TEXT NOT NULL,evidence TEXT NOT NULL,usage TEXT NOT NULL,message TEXT NOT NULL);
@@ -142,6 +143,23 @@ export class AgentService {
     this.store.db
       .prepare("UPDATE investigations SET finished_at=? WHERE id=?")
       .run(now(), id);
+  }
+  handoffCompletedProposal(id: string) {
+    const completed = this.get(id);
+    if (!completed.proposal_id || !this.proposalReady) return;
+    void Promise.resolve()
+      .then(() => this.proposalReady!(completed.proposal_id))
+      .catch((error) =>
+        this.store.event(
+          completed.ticket_id,
+          completed.proposal_id,
+          "Controller",
+          "Automatic Agent 2 start deferred",
+          error instanceof Error
+            ? error.message
+            : "Agent 2 could not start automatically.",
+        ),
+      );
   }
   async start(ticketId: string) {
     if (this.active)
@@ -221,6 +239,7 @@ export class AgentService {
         .finally(() => {
           this.active = false;
           this.activeId = undefined;
+          this.handoffCompletedProposal(id);
         });
       return this.get(id);
     } catch {
@@ -634,7 +653,7 @@ export class AgentService {
             this.finish(
               id,
               "Ready for Agent 2",
-              "Agent 1 proposed a change. Agent 2 can now check the implementation and flag concerns.",
+              "Agent 1 proposed a change. Agent 2 will start automatically and flag concerns.",
             );
             return proposal;
           } else {

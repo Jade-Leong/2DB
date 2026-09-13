@@ -73,7 +73,7 @@ The original marketplace source is never patched. Review the full base/candidate
 For each sample candidate:
 
 1. Inspect its **Local change proposal** and source diff.
-2. Select **Start Agent 2** to test the exact revision and flag concerns.
+2. Agent 2 starts automatically to test the exact revision and flag concerns. Use **Start Agent 2** only if the automatic handoff was deferred.
 3. Review Agent 2's evidence, then select **Approve**, **Request changes**, or **Reject proposal**.
 4. Human approval records the reviewer, timestamp, exact candidate revision, and revision counter in the **Approved** queue for human PR preparation.
 5. Replacing the candidate invalidates prior verification. An on-disk edit to a frozen fixture is detected before execution and refused; unreviewed code is never executed.

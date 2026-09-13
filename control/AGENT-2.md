@@ -67,7 +67,7 @@ Use that key on the 2DB sign-in screen. This is a local demo approval mechanism,
 4. Under **Agent 1 · Scripted demonstration**, select **Prepared discount fix** and click **Use scripted demo**.
 5. Wait for **Awaiting engineer review**. Open the fresh screenshot and observed-values artifact. Expected reproduction evidence is displayed/order `3840` cents and payment `4800` cents.
 6. Open the proposal and review the actual diff and hashes.
-7. Confirm Agent 2 shows **Ready**, then click **Start Agent 2**. The controller records an internal, revision-bound authorization to execute the isolated candidate. This is not human approval. Billable API use starts only because you clicked it.
+7. Confirm Agent 2 shows **Ready** before starting Agent 1. Agent 2 starts automatically when the proposal is ready and the controller records an internal, revision-bound authorization to execute the isolated candidate. This is not human approval. Use **Start Agent 2** only if the automatic handoff was deferred.
 8. Review the mandatory baseline/candidate checks, live browser actions, and any issues Agent 2 flags.
 9. Decide whether the Agent 2-reviewed change is ready for human PR work. You may approve after a passed, failed, or inconclusive completed Agent 2 review because the final judgment is human. Click **Approve** to move the exact revision into the **Approved** queue. It does not create, merge, or deploy a pull request.
 
@@ -84,7 +84,7 @@ The prepared fix reaches **Verified awaiting engineer review** only when all eig
 1. Confirm both status commands report **Ready**.
 2. Open the discount ticket and click **Start Agent 1**.
 3. If Agent 1 produces a proposal, review its evidence and exact controller-computed diff.
-4. Click **Start Agent 2** to independently check the implementation and surface concerns.
+4. Agent 2 starts automatically after Agent 1 produces the proposal. Use **Start Agent 2** only to retry a deferred handoff.
 5. Review Agent 2's findings. Click **Approve** only when the exact reviewed revision is ready for a human engineer to turn into a pull request. Agent 2 may flag failures or uncertainty; the human retains the decision.
 
 The **Approved** inbox filter is the human PR work queue. Approval is an internal queue transition only; GitHub credentials are not configured or required.

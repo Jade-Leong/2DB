@@ -367,6 +367,15 @@ test("deterministic synthetic agent proposal requires exact verification authori
   ]);
   assert.equal(p.author, "Agent-generated");
   assert.equal(p.state, "Ready for Agent 2");
+  const previousHandoff = c.agent.proposalReady;
+  let automaticallyStarted = "";
+  c.agent.proposalReady = (proposalId) => {
+    automaticallyStarted = proposalId;
+  };
+  c.agent.handoffCompletedProposal(id);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(automaticallyStarted, p.id);
+  c.agent.proposalReady = previousHandoff;
   await assert.rejects(c.runner.start(p.id), /authorization/);
   assert.equal(
     (

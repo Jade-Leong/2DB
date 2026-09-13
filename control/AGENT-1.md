@@ -96,7 +96,7 @@ Startup troubleshooting: a run with no thread ID may indicate worker initializat
 
 ## 5. Independently test, then approve for human PR work
 
-When Agent 1 has proposed a candidate, select **Start Agent 2**. The controller binds the exact source, requirements, and harness identities before executing the isolated candidate. A changed candidate invalidates that verification authorization. Agent proposals cannot be swapped for the developer fixture. Request changes and start a fresh investigation for a new revision.
+When Agent 1 has proposed a candidate, Agent 2 starts automatically. The controller binds the exact source, requirements, and harness identities before executing the isolated candidate. A changed candidate invalidates that verification authorization. If Agent 2 is unavailable when the automatic handoff occurs, the dashboard records the reason and keeps **Start Agent 2** available for retry. Agent proposals cannot be swapped for the developer fixture. Request changes and start a fresh investigation for a new revision.
 
 After Agent 2 finishes, review its checks and flagged concerns. Human **Approve** is available for the exact revision reviewed by live Agent 2, including a failed or inconclusive review; the human retains the final judgment. Approval moves the ticket to the **Approved** queue for a human engineer to create a pull request; it does not create, merge, or deploy one.
 

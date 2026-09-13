@@ -178,7 +178,7 @@ test("mocked live integration preserves mode and requires every evidence gate", 
   assert.match(run.message, /incomplete/i);
 });
 
-test("mocked live integration can verify only with matching approval and complete gates", async () => {
+test("trusted Playwright and payment evidence suffice without a duplicate browser replay", async () => {
   const proposal = approved();
   const service = new Agent2Service(
     store,
@@ -188,18 +188,15 @@ test("mocked live integration can verify only with matching approval and complet
       assessment: {
         status: "resolved",
         summary: "Mocked model assessment",
-        evidenceReferences: ["D01", "baseline-01.png", "candidate-02.png"],
+        evidenceReferences: ["D01"],
         unsatisfiedRequirements: [],
       },
-      actions: [
-        { environment: "baseline", artifact: "baseline-01.png" },
-        { environment: "candidate", artifact: "candidate-02.png" },
-      ],
+      actions: [],
       usage: null,
       gates: {
-        baselineBrowser: true,
-        candidateBrowser: true,
-        screenshots: true,
+        baselineBrowser: false,
+        candidateBrowser: false,
+        screenshots: false,
         regressionEvidence: true,
         paymentEvidence: true,
       },

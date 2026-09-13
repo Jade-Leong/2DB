@@ -33,9 +33,17 @@ export function createControl(
   const store = new Store(options.dataDir ?? defaultData, options.ticketSource),
     runner = new Runner(store);
   store.remoteTickets = options.remoteTickets;
-  const agent = new AgentService(store, options.agentStatus);
-  const scriptedDemo = new ScriptedDemoService(store);
   const agent2 = new Agent2Service(store, runner, options.agent2Status);
+  const agent = new AgentService(
+    store,
+    options.agentStatus,
+    (proposalId) => agent2.start(proposalId),
+  );
+  const scriptedDemo = new ScriptedDemoService(
+    store,
+    undefined,
+    (proposalId) => agent2.start(proposalId),
+  );
   let researchCheckRunning = false;
   let researchCheckAt = 0;
   let researchCheckResult: Awaited<ReturnType<typeof checkTavily>> | null =

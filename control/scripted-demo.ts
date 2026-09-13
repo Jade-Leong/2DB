@@ -17,6 +17,7 @@ export class ScriptedDemoService {
   constructor(
     public store: Store,
     public isolationCheck = probeIsolation,
+    public proposalReady?: (proposalId: string) => Promise<unknown> | unknown,
   ) {
     store.db.exec(`CREATE TABLE IF NOT EXISTS scripted_investigations(
       id TEXT PRIMARY KEY,
@@ -159,6 +160,7 @@ export class ScriptedDemoService {
     kind: FixtureKind,
     signal: AbortSignal,
   ) {
+    let completedProposalId: string | undefined;
     const isolation = await this.isolationCheck();
     if (!isolation.ready || !isolation.image)
       throw new Error("Setup required: " + isolation.message);
@@ -313,6 +315,7 @@ export class ScriptedDemoService {
       );
       const proposal = this.store.create(ticket.id, kind, "scripted-agent-1");
       this.store.submit(proposal.id, "Scripted investigation");
+      completedProposalId = proposal.id;
       this.store.db
         .prepare(
           "UPDATE scripted_investigations SET state='Awaiting engineer review',proposal_id=?,finished_at=?,message=? WHERE id=?",
@@ -337,6 +340,20 @@ export class ScriptedDemoService {
     } finally {
       await app.close();
     }
+    if (completedProposalId && this.proposalReady)
+      void Promise.resolve()
+        .then(() => this.proposalReady!(completedProposalId!))
+        .catch((error) =>
+          this.store.event(
+            ticket.id,
+            completedProposalId!,
+            "Controller",
+            "Automatic Agent 2 start deferred",
+            error instanceof Error
+              ? error.message
+              : "Agent 2 could not start automatically.",
+          ),
+        );
   }
 
   artifact(id: string, name: string) {

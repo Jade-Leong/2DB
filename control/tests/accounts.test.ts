@@ -115,6 +115,24 @@ test("Terminal account pages work on desktop and mobile with two content font si
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });
+test("account configuration recovers from an outage without losing entered credentials", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ reducedMotion: "reduce" });
+    await page.route("**/auth-api/config", route => route.fulfill({ status: 503, contentType: "text/plain", body: "The hosted backend is starting or unavailable." }));
+    await page.goto(origin + "/signup");
+    await page.getByText("Account service could not be reached.", { exact: false }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Create account →" }).isEnabled(), false);
+    assert.equal((await page.locator("body").innerText()).includes("not configured"), false);
+    await page.getByLabel("Email", { exact: true }).fill("recovery@example.test");
+    await page.getByLabel("Password", { exact: true }).fill("a-valid-test-password");
+    await page.unroute("**/auth-api/config");
+    await page.getByRole("button", { name: "Retry connection" }).click();
+    await page.waitForFunction(() => !document.querySelector<HTMLButtonElement>("#account-form button")?.disabled);
+    assert.equal(await page.getByLabel("Email", { exact: true }).inputValue(), "recovery@example.test");
+    assert.equal(await page.getByLabel("Password", { exact: true }).inputValue(), "a-valid-test-password");
+  } finally { await browser.close(); }
+});
 test("plain-text hosted failures show a useful error and allow retry", async () => {
   const browser = await chromium.launch({ headless: true });
   try {

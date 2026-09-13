@@ -1,5 +1,8 @@
 let accountMode = location.pathname === "/signup" || new URLSearchParams(location.search).get("auth") === "signup" ? "signup" : "login";
 let accountConfig = null;
+let accountConfigError = "";
+let accountConfigLoading = false;
+const accountHome = new URL(".", document.currentScript.src).pathname;
 let accountMessage = "";
 let accountError = "";
 let accountBusy = false;
@@ -16,6 +19,37 @@ async function readApiResponse(response) {
   return result;
 }
 
+async function loadAccountConfig() {
+  if (accountConfigLoading) return;
+  accountConfigLoading = true;
+  accountConfigError = "";
+  try {
+    const response = await fetch("/auth-api/config", { signal: AbortSignal.timeout(12000), cache: "no-store" });
+    const result = await readApiResponse(response);
+    if (typeof result?.enabled !== "boolean") throw new Error("Invalid account configuration response");
+    accountConfig = result;
+  } catch {
+    accountConfig = null;
+    accountConfigError = "Account service could not be reached. Retry the connection to sign in.";
+  } finally {
+    accountConfigLoading = false;
+    if (!token) {
+      const form = document.getElementById("account-form");
+      const values = form ? new FormData(form) : null;
+      render();
+      if (values) for (const name of ["email", "password"]) {
+        const input = document.querySelector(`#account-form input[name="${name}"]`);
+        if (input) input.value = values.get(name) || "";
+      }
+    }
+  }
+}
+
+document.addEventListener("click", event => {
+  if (event.target.closest("[data-account-retry]")) loadAccountConfig();
+});
+window.addEventListener("online", () => { if (!accountConfig?.enabled) loadAccountConfig(); });
+
 function agentOverview() {
   const status = token ? agentStatus?.state || "Checking setup" : "Sign in to check agent status";
   return `<section class="agent-overview" id="agents" aria-label="Two separate agents and your decision">
@@ -31,7 +65,7 @@ function localAccess() {
 
 function accountView() {
   const signup = accountMode === "signup";
-  return `<section class="login panel" aria-label="Account access"><div class="account-tabs" role="tablist" aria-label="Account access"><button id="login-tab" type="button" role="tab" aria-controls="account-panel" aria-selected="${!signup}" data-account-mode="login">Sign in</button><button id="signup-tab" type="button" role="tab" aria-controls="account-panel" aria-selected="${signup}" data-account-mode="signup">Sign up</button></div><div id="account-panel" role="tabpanel" aria-labelledby="${signup ? "signup" : "login"}-tab"><span class="eyebrow">you</span><h2 data-type="account-${accountMode}-title">${signup ? "Join the workspace." : "Back to building."}</h2><p data-type="account-${accountMode}-copy">${signup ? "Create an account to access the shared tickets, proposals, and verification results." : "Sign in to review tickets and work with your agents."}</p>${accountMessage ? `<p class="auth-message" role="status">${esc(accountMessage)}</p>` : ""}${accountError ? `<p class="auth-message error" role="alert">${esc(accountError)}</p>` : ""}<form id="account-form"><label>Email<input name="email" type="email" autocomplete="email" maxlength="254" required></label><label>Password<input name="password" type="password" autocomplete="${signup ? "new-password" : "current-password"}" minlength="${signup ? 12 : 1}" maxlength="128" ${signup ? 'aria-describedby="password-hint"' : ""} required></label>${signup ? '<p id="password-hint" class="muted">Use at least 12 characters. You’ll confirm your email before signing in.</p>' : ""}<button ${accountBusy || !accountConfig?.enabled ? "disabled" : ""}>${accountBusy ? "Please wait…" : signup ? "Create account →" : "Sign in →"}</button></form>${accountConfig?.enabled ? '<p class="muted">Every account joins the same engineering workspace.</p>' : `<p class="muted" role="status">${accountConfig === null ? "Checking account access…" : "Email sign-in is not configured. Use local engineer access below."}</p>`}</div>${localAccess()}</section>`;
+  return `<section class="login panel" aria-label="Account access"><div class="account-tabs" role="tablist" aria-label="Account access"><button id="login-tab" type="button" role="tab" aria-controls="account-panel" aria-selected="${!signup}" data-account-mode="login">Sign in</button><button id="signup-tab" type="button" role="tab" aria-controls="account-panel" aria-selected="${signup}" data-account-mode="signup">Sign up</button></div><div id="account-panel" role="tabpanel" aria-labelledby="${signup ? "signup" : "login"}-tab"><span class="eyebrow">you</span><h2 data-type="account-${accountMode}-title">${signup ? "Join the workspace." : "Back to building."}</h2><p data-type="account-${accountMode}-copy">${signup ? "Create an account to access the shared tickets, proposals, and verification results." : "Sign in to review tickets and work with your agents."}</p>${accountMessage ? `<p class="auth-message" role="status">${esc(accountMessage)}</p>` : ""}${accountError ? `<p class="auth-message error" role="alert">${esc(accountError)}</p>` : ""}<form id="account-form"><label>Email<input name="email" type="email" autocomplete="email" maxlength="254" required></label><label>Password<input name="password" type="password" autocomplete="${signup ? "new-password" : "current-password"}" minlength="${signup ? 12 : 1}" maxlength="128" ${signup ? 'aria-describedby="password-hint"' : ""} required></label>${signup ? '<p id="password-hint" class="muted">Use at least 12 characters. You’ll confirm your email before signing in.</p>' : ""}<button ${accountBusy || !accountConfig?.enabled ? "disabled" : ""}>${accountBusy ? "Please wait…" : signup ? "Create account →" : "Sign in →"}</button></form>${accountConfig?.enabled ? '<p class="muted">Every account joins the same engineering workspace.</p>' : `<p class="muted" role="status">${accountConfigError ? esc(accountConfigError) : accountConfig === null ? "Checking account access…" : "Email sign-in is not configured on this deployment."}</p><button type="button" class="secondary" data-account-retry ${accountConfigLoading ? "disabled" : ""}>Retry connection</button>`}</div>${localAccess()}</section>`;
 }
 
 document.addEventListener("click", (event) => {
@@ -65,7 +99,7 @@ document.addEventListener("submit", async (event) => {
     else {
       token = result.token;
       sessionStorage.setItem("2db-engineer-session", token);
-      if (["/login", "/signup"].includes(location.pathname)) history.replaceState(null, "", "/");
+      if (["/login", "/signup"].includes(location.pathname)) history.replaceState(null, "", accountHome);
       await refresh();
     }
   } catch (e) { accountError = e.message || "Please try again."; }
@@ -79,9 +113,5 @@ window.addEventListener("DOMContentLoaded", async () => {
     accountMessage = params.has("error_description") ? "The confirmation link could not be completed. Try signing in or request a new account confirmation." : "Email confirmation received. Sign in to continue.";
     history.replaceState(null, "", location.pathname + location.search);
   }
-  try {
-    const response = await fetch("/auth-api/config");
-    accountConfig = response.ok ? await response.json() : { enabled: false };
-  } catch { accountConfig = { enabled: false }; }
-  if (!token) render();
+  await loadAccountConfig();
 });

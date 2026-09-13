@@ -35,10 +35,16 @@ async function backend() {
 }
 export default async function handler(req,res) {
   res.setHeader('Cache-Control','no-store');
+  const path=new URL(req.url,'https://internal').pathname;
+  if(path==='/auth-api/config' && req.method==='GET') {
+    res.setHeader('Content-Type','application/json; charset=utf-8');
+    res.statusCode=200;
+    res.end(JSON.stringify({enabled:Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_PUBLISHABLE_KEY && process.env.TWO_DB_CLOUD_GATEWAY_KEY && process.env.TWO_DB_CLOUD_ENGINEER_KEY)}));
+    return;
+  }
   if(!process.env.TWO_DB_CLOUD_GATEWAY_KEY||!process.env.TWO_DB_CLOUD_ENGINEER_KEY){jsonError(res,503,'Hosted credentials are not configured.');return;}
   if(req.headers.origin && req.headers.origin!==`https://${req.headers.host}`){jsonError(res,403,'Cross-origin requests are not allowed.');return;}
   if(req.headers['sec-fetch-site']==='cross-site' && !['GET','HEAD'].includes(req.method)){jsonError(res,403,'Cross-site requests are not allowed.');return;}
-  const path=new URL(req.url,'https://internal').pathname;
   if(path.startsWith('/__')){jsonError(res,404,'Not found.');return;}
   try {
     if(!warming)warming=backend().finally(()=>{warming=undefined;});

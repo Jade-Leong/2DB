@@ -287,7 +287,7 @@ export class Store {
     });
     return this.detail(id);
   }
-  submit(id: string) {
+  submit(id: string, reviewer = "Local engineer") {
     const p = this.proposal(id);
     this.checkCurrent(p);
     if (!["Proposal ready", "Changes requested"].includes(p.state))
@@ -300,13 +300,13 @@ export class Store {
     this.event(
       p.ticket_id,
       id,
-      "Local engineer",
+      reviewer,
       "Awaiting engineer approval",
       p.candidate_revision,
     );
     return this.detail(id);
   }
-  approve(id: string, revision: string, revisionNumber: number) {
+  approve(id: string, revision: string, revisionNumber: number, reviewer = "Local engineer") {
     const p = this.proposal(id);
     this.checkCurrent(p);
     if (
@@ -325,7 +325,7 @@ export class Store {
       .run(
         idApproval,
         id,
-        "Local engineer",
+        reviewer,
         p.candidate_revision,
         p.base_revision,
         p.requirements_hash,
@@ -339,13 +339,13 @@ export class Store {
         "UPDATE proposals SET current_approval=?,state='Approved for testing',updated_at=? WHERE id=?",
       )
       .run(idApproval, timestamp, id);
-    this.event(p.ticket_id, id, "Local engineer", "Approved for testing", {
+    this.event(p.ticket_id, id, reviewer, "Approved for testing", {
       approval: idApproval,
       revision: p.candidate_revision,
     });
     return this.detail(id);
   }
-  decision(id: string, action: "changes" | "reject", note: string) {
+  decision(id: string, action: "changes" | "reject", note: string, reviewer = "Local engineer") {
     const p = this.proposal(id);
     if (p.state === "Verification running")
       problem("Verification is running; review it after completion.", 409);
@@ -354,7 +354,7 @@ export class Store {
     this.db
       .prepare("UPDATE proposals SET state=?,updated_at=? WHERE id=?")
       .run(state, now(), id);
-    this.event(p.ticket_id, id, "Local engineer", state, note);
+    this.event(p.ticket_id, id, reviewer, state, note);
     return this.detail(id);
   }
   approvalFor(p: any) {

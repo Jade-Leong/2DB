@@ -6,6 +6,8 @@ The customer website preserves three intentional application defects for investi
 
 ## Milestone 3: Agent 1 investigation
 
+The 2db engineer workspace now uses the Terminal-style design with two agent roles, scroll typing, and email/password login and sign-up. Confirmed accounts share the existing workspace; exact-revision approval is still required for testing. The local engineer key remains available. See [account setup and validation](docs/ACCOUNTS.md).
+
 Agent 1 now has **Tavily Search + Extract** for documentation-backed investigation. The controller retrieves bounded official sources, and the engineer dashboard shows research activity and cited explanations. See [Tavily setup and demonstration](docs/TAVILY.md). Run `npm run control:research:check` to verify the live integration independently of Docker and the model worker.
 
 See [the Agent 1 operating guide](control/AGENT-1.md) for Docker Desktop setup, private API-key configuration, exact PowerShell commands, ticket investigation, evidence, and human approval. The dashboard remains at http://127.0.0.1:3002. It shows **Setup required** until authentication and the container/browser probe pass. A live model run has not yet been demonstrated; [actual results](operator/MILESTONE-3-RESULTS.md) distinguish deterministic tests from live execution. Original marketplace source and saved data are preserved.

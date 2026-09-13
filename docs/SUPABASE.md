@@ -21,7 +21,7 @@ Supabase advisors reported only informational notices: [RLS without policies](ht
 
 The marketplace uses Supabase when `MARKET_DATABASE=supabase`. Accounts, products, discounts, orders, items, payments, checkout retry records, and complaints share the private `two_db` schema. Both intake choices submit through the same `/api/support` endpoint. The controller reads its inbox from Supabase in read-only transactions and freezes the same original complaint before investigation.
 
-Investigation records, approvals, evidence, and uploaded files remain local to this machine. Demo account selection remains the existing local-only identity mechanism; Supabase Auth is not enabled. This switch is database persistence, not a public production deployment.
+Investigation records, approvals, evidence, and uploaded files remain local to this machine. Marketplace demo account selection remains unchanged. The separate 2db engineer workspace now supports Supabase email/password authentication and open sign-up; confirmed accounts join the shared workspace. See [account setup](ACCOUNTS.md) for email confirmation, redirect configuration, and validation. This is not a public production deployment.
 
 ## Cutover and rollback
 

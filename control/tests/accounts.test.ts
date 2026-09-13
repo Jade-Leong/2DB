@@ -104,6 +104,8 @@ test("Terminal account pages work on desktop and mobile with two content font si
     await page.getByLabel("Password", { exact: true }).fill("a-valid-test-password");
     await page.getByRole("button", { name: "Sign in →", exact: true }).click();
     await page.getByRole("heading", { name: "Ticket inbox" }).waitFor();
+    assert.equal(await page.locator(".terminal-hero, #agents").count(), 0);
+    assert.equal(await page.getByRole("link", { name: "The agents", exact: true }).count(), 0);
     assert.equal(new URL(page.url()).pathname, "/");
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -150,6 +152,8 @@ test("plain-text hosted failures show a useful error and allow retry", async () 
     await page.getByLabel("Password", { exact: true }).fill("a-valid-test-password");
     await page.getByRole("button", { name: "Sign in →", exact: true }).click();
     await page.getByRole("heading", { name: "Ticket inbox" }).waitFor();
+    assert.equal(await page.locator(".terminal-hero, #agents").count(), 0);
+    assert.equal(await page.getByRole("link", { name: "The agents", exact: true }).count(), 0);
   } finally { await browser.close(); }
 });
 test("scroll reveals typed copy without replaying it after a render", async () => {

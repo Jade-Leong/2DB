@@ -91,3 +91,14 @@ function researchCitationsView(research) {
   if (!research) return "";
   return `<section class="panel research-panel"><span class="eyebrow">TAVILY · CONTRIBUTION TO THIS PROPOSAL</span><h2>Why these sources matter.</h2><p>${esc(research.summary)}</p>${research.citations.map((c) => sourceCard(c, c)).join("")}<p class="small muted">Excerpts are checked against retrieved content. Relevance is the agent's assessment; independent tests determine whether the change works.</p></section>`;
 }
+
+function ticketAgentActivity(t) {
+  const first = investigations.find((run) => run.ticket_id === t.id);
+  const proposal = selected?.ticket_id === t.id ? selected : proposals.find((p) => p.ticket_id === t.id);
+  const secondRunning = ["Verification running", "Live Agent 2 running"].includes(proposal?.state);
+  const states = [
+    { name: "agent 1", active: Boolean(first && !first.finished_at), state: first?.state || "Not started" },
+    { name: "agent 2", active: secondRunning, state: secondRunning ? proposal.state : proposal?.runs?.[0]?.state || proposal?.state || "Not started" },
+  ];
+  return `<span class="ticket-agents" aria-label="Ticket agent activity">${states.map((agent) => `<span class="ticket-agent"><span class="agent-spinner ${agent.active ? "is-running" : ""}" aria-hidden="true">${agent.active ? "◌" : "·"}</span><span>${agent.name} <span class="muted">${esc(agent.state)}</span></span></span>`).join("")}</span>`;
+}

@@ -205,3 +205,13 @@ footer { color: var(--muted); border-color: var(--line); padding: 24px 0; flex-w
   .typing-char { opacity: 1; }
   .typing-char.is-cursor:after { display: none; }
 }
+
+/* Ticket activity stays visible while operational details remain below it. */
+.ticket-agents { display: flex; flex-wrap: wrap; gap: 10px 24px; padding: 12px 0; }
+.ticket .ticket-agents { flex-direction: column; gap: 4px; }
+.ticket-agent { display: inline-flex; align-items: baseline; gap: 8px; }
+.agent-spinner { display: inline-block; color: var(--accent, #8bcda4); }
+.agent-spinner.is-running { animation: agent-turn 1s linear infinite; }
+.workspace-research { margin: 16px 0; }
+@keyframes agent-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .agent-spinner.is-running { animation: none; } }

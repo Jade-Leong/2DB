@@ -161,7 +161,7 @@ app.post("/api/checkout", async (req, res) => {
     await db.prepare("INSERT INTO payments VALUES (?,?,?,?,?)").run(
       randomUUID(),
       id,
-      q.subtotal_cents,
+      q.total_cents,
       "succeeded",
       now,
     );

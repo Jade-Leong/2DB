@@ -4,6 +4,18 @@ let accountMessage = "";
 let accountError = "";
 let accountBusy = false;
 
+async function readApiResponse(response) {
+  let result;
+  try { result = await response.json(); }
+  catch {
+    throw new Error(response.status >= 500
+      ? "The server is starting or temporarily unavailable. Please try again shortly."
+      : "The server returned an unexpected response. Please try again.");
+  }
+  if (!response.ok) throw new Error(typeof result?.error === "string" ? result.error : "Request failed. Please try again.");
+  return result;
+}
+
 function agentOverview() {
   const status = token ? agentStatus?.state || "Checking setup" : "Sign in to check agent status";
   return `<section class="agent-overview" id="agents" aria-label="Two separate agents and your decision">
@@ -48,8 +60,7 @@ document.addEventListener("submit", async (event) => {
   submit.disabled = true; submit.textContent = "Please wait…";
   try {
     const response = await fetch(`/auth-api/${accountMode}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: data.get("email"), password: data.get("password") }) });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || "Account request failed. Please try again.");
+    const result = await readApiResponse(response);
     if (accountMode === "signup") { accountMessage = result.message; accountMode = "login"; }
     else {
       token = result.token;

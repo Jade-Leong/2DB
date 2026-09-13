@@ -28,15 +28,11 @@ async function api(url, data) {
     },
     ...(data === undefined ? {} : { body: JSON.stringify(data) }),
   });
-  const result = await res.json();
-  if (!res.ok) {
-    if (res.status === 401 && url !== "/login") {
+  if (res.status === 401 && url !== "/login") {
       token = "";
       sessionStorage.removeItem("2db-engineer-session");
-    }
-    throw new Error(result.error);
   }
-  return result;
+  return readApiResponse(res);
 }
 async function refresh() {
   if (!token) return;

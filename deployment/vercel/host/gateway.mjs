@@ -2,6 +2,7 @@ import http from 'node:http';
 import {timingSafeEqual} from 'node:crypto';
 import {readFileSync,writeFileSync,mkdirSync,existsSync} from 'node:fs';
 import {spawn} from 'node:child_process';
+function jsonError(res,status,message) {res.writeHead(status,{'content-type':'application/json; charset=utf-8'}).end(JSON.stringify({error:message}));}
 const root='/home/vercel-sandbox/twodb';
 const key=readFileSync('/home/vercel-sandbox/twodb-gateway-key','utf8').trim();
 const equals=(value)=> typeof value==='string' && Buffer.byteLength(value)===Buffer.byteLength(key) && timingSafeEqual(Buffer.from(value),Buffer.from(key));
@@ -25,7 +26,7 @@ async function start(config) {
   throw new Error('Backend startup failed');
 }
 const server=http.createServer(async(req,res)=>{
-  if(!equals(req.headers['x-twodb-gateway'])) {res.writeHead(404).end();return;}
+  if(!equals(req.headers['x-twodb-gateway'])) {jsonError(res,404,'Not found.');return;}
   if(req.url==='/__bootstrap' && req.method==='POST') {
     try {
       let body='';for await(const chunk of req){body+=chunk;if(body.length>12000)throw Error('Too large');}
@@ -33,10 +34,10 @@ const server=http.createServer(async(req,res)=>{
       if(typeof config.engineerKey!=='string'||config.engineerKey.length<40||typeof config.apiKey!=='string'||typeof config.model!=='string'||typeof config.supabaseDbUrl!=='string'||typeof config.supabaseUrl!=='string'||typeof config.supabasePublishableKey!=='string')throw Error('Configuration missing');
       if(!boot)boot=start(config).finally(()=>{boot=undefined;});
       await boot;res.writeHead(200,{'content-type':'application/json'}).end('{"ok":true}');
-    }catch {res.writeHead(503).end('Backend setup incomplete');}return;
+    }catch {jsonError(res,503,'Backend setup incomplete.');}return;
   }
   const url=new URL(req.url,'http://internal');
-  if(url.pathname.startsWith('/__')){res.writeHead(404).end();return;}
+  if(url.pathname.startsWith('/__')){jsonError(res,404,'Not found.');return;}
   const isControl=url.pathname==='/control'||url.pathname.startsWith('/control/')||url.pathname.startsWith('/engineer-api/')||url.pathname.startsWith('/auth-api/');
   const port=isControl?3002:3003;
   const route=url.pathname.startsWith('/control')?(url.pathname.slice(8)||'/'):url.pathname;
@@ -46,7 +47,7 @@ const server=http.createServer(async(req,res)=>{
   const upstream=http.request({hostname:'127.0.0.1',port,path:route+url.search,method:req.method,headers},response=>{
     res.writeHead(response.statusCode,response.headers);response.pipe(res);
   });
-  upstream.on('error',()=>{if(!res.headersSent)res.writeHead(503);res.end('Backend unavailable');});
+  upstream.on('error',()=>{if(!res.headersSent)jsonError(res,503,'Backend unavailable. Please try again shortly.');else res.destroy();});
   req.pipe(upstream);
 });
 server.listen(8080,'0.0.0.0');

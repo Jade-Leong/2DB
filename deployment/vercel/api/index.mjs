@@ -2,6 +2,11 @@ import {Sandbox} from '@vercel/sandbox';
 import {Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {ensureDocker} from '../runtime.mjs';
+function jsonError(res,status,message) {
+  res.statusCode=status;
+  res.setHeader('Content-Type','application/json; charset=utf-8');
+  res.end(JSON.stringify({error:message}));
+}
 let warming;
 let cached;
 class HostedBackendError extends Error {
@@ -30,11 +35,11 @@ async function backend() {
 }
 export default async function handler(req,res) {
   res.setHeader('Cache-Control','no-store');
-  if(!process.env.TWO_DB_CLOUD_GATEWAY_KEY||!process.env.TWO_DB_CLOUD_ENGINEER_KEY){res.statusCode=503;res.end('Hosted credentials are not configured.');return;}
-  if(req.headers.origin && req.headers.origin!==`https://${req.headers.host}`){res.statusCode=403;res.end('Cross-origin requests are not allowed.');return;}
-  if(req.headers['sec-fetch-site']==='cross-site' && !['GET','HEAD'].includes(req.method)){res.statusCode=403;res.end('Cross-site requests are not allowed.');return;}
+  if(!process.env.TWO_DB_CLOUD_GATEWAY_KEY||!process.env.TWO_DB_CLOUD_ENGINEER_KEY){jsonError(res,503,'Hosted credentials are not configured.');return;}
+  if(req.headers.origin && req.headers.origin!==`https://${req.headers.host}`){jsonError(res,403,'Cross-origin requests are not allowed.');return;}
+  if(req.headers['sec-fetch-site']==='cross-site' && !['GET','HEAD'].includes(req.method)){jsonError(res,403,'Cross-site requests are not allowed.');return;}
   const path=new URL(req.url,'https://internal').pathname;
-  if(path.startsWith('/__')){res.statusCode=404;res.end();return;}
+  if(path.startsWith('/__')){jsonError(res,404,'Not found.');return;}
   try {
     if(!warming)warming=backend().finally(()=>{warming=undefined;});
     const origin=await warming;
@@ -44,10 +49,15 @@ export default async function handler(req,res) {
     const chunks=[];let length=0;
     if(!['GET','HEAD'].includes(req.method)) {
       if(req.body!==undefined)chunks.push(Buffer.isBuffer(req.body)?req.body:Buffer.from(typeof req.body==='string'?req.body:JSON.stringify(req.body)));
-      else for await(const chunk of req){length+=chunk.length;if(length>2200000){res.statusCode=413;res.end('Request too large');return;}chunks.push(chunk);}
-      if(chunks.reduce((total,chunk)=>total+chunk.length,0)>2200000){res.statusCode=413;res.end('Request too large');return;}
+      else for await(const chunk of req){length+=chunk.length;if(length>2200000){jsonError(res,413,'Request too large');return;}chunks.push(chunk);}
+      if(chunks.reduce((total,chunk)=>total+chunk.length,0)>2200000){jsonError(res,413,'Request too large');return;}
     }
     const response=await fetch(origin+req.url,{method:req.method,headers,body:chunks.length?Buffer.concat(chunks):undefined,redirect:'manual',signal:AbortSignal.timeout(55000)});
+    if(!response.ok && !(response.headers.get('content-type')||'').includes('application/json')) {
+      await response.body?.cancel();
+      jsonError(res,response.status,response.status>=500?'The hosted backend is starting or unavailable. Retry shortly.':'The request could not be completed. Please try again.');
+      return;
+    }
     res.statusCode=response.status;
     for(const name of ['content-type','content-security-policy','x-content-type-options','location'])if(response.headers.has(name))res.setHeader(name,response.headers.get(name));
     if(response.body)await pipeline(Readable.fromWeb(response.body),res);else res.end();
@@ -55,6 +65,6 @@ export default async function handler(req,res) {
     cached=undefined;
     const stage=error instanceof HostedBackendError?error.stage:'proxy';
     console.error(`2DB hosted backend unavailable at ${stage}`);
-    if(!res.headersSent){res.statusCode=503;res.setHeader('X-2DB-Backend-Stage',stage);res.end('The hosted backend is starting or unavailable. Retry shortly.');}else res.destroy();
+    if(!res.headersSent){res.setHeader('X-2DB-Backend-Stage',stage);jsonError(res,503,'The hosted backend is starting or unavailable. Retry shortly.');}else res.destroy();
   }
 }

@@ -115,6 +115,25 @@ test("Terminal account pages work on desktop and mobile with two content font si
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });
+test("plain-text hosted failures show a useful error and allow retry", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ reducedMotion: "reduce" });
+    await page.route("**/auth-api/login", route => route.fulfill({ status: 503, contentType: "text/plain", body: "The hosted backend is starting or unavailable. Retry shortly." }));
+    await page.goto(origin + "/login");
+    await page.getByLabel("Email", { exact: true }).fill("engineer@example.test");
+    await page.getByLabel("Password", { exact: true }).fill("a-valid-test-password");
+    await page.getByRole("button", { name: "Sign in →", exact: true }).click();
+    await page.getByRole("alert").filter({ hasText: "temporarily unavailable" }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Sign in →", exact: true }).isEnabled(), true);
+    assert.equal((await page.locator("body").innerText()).includes("Unexpected token"), false);
+    await page.unroute("**/auth-api/login");
+    await page.getByLabel("Email", { exact: true }).fill("engineer@example.test");
+    await page.getByLabel("Password", { exact: true }).fill("a-valid-test-password");
+    await page.getByRole("button", { name: "Sign in →", exact: true }).click();
+    await page.getByRole("heading", { name: "Ticket inbox" }).waitFor();
+  } finally { await browser.close(); }
+});
 test("scroll reveals typed copy without replaying it after a render", async () => {
   const browser = await chromium.launch({ headless: true });
   try {

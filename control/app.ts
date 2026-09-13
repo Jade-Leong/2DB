@@ -207,6 +207,9 @@ export function createControl(
   app.post("/engineer-api/tickets/:id/import", async (req, res) =>
     res.json(await store.receiveTicket(String(req.params.id))),
   );
+  app.delete("/engineer-api/tickets/:id", (req, res) =>
+    res.json(store.deleteTicket(String(req.params.id))),
+  );
   app.post("/engineer-api/proposals", async (req, res) => {
     await store.receiveTicket(String(req.body.ticketId));
     return res

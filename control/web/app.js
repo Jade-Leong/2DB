@@ -19,9 +19,10 @@ const esc = (value) =>
   );
 const short = (value) => (value ? value.slice(0, 12) : "—");
 const date = (value) => (value ? new Date(value).toLocaleString() : "—");
-async function api(url, data) {
+async function api(url, data, method) {
+  const verb = method || (data === undefined ? "GET" : "POST");
   const res = await fetch("/engineer-api" + url, {
-    method: data === undefined ? "GET" : "POST",
+    method: verb,
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -102,7 +103,7 @@ ${
   window.TerminalMotion?.enhance(root);
 }
 function ticketView(t) {
-  return `<section class="ticket-header"><div class="ticket-kicker"><span>${esc(t.customer_name)}</span><time title="${esc(date(t.submitted_at))}">${relativeDate(t.submitted_at)}</time></div><h2>${esc(t.subject)}</h2><blockquote>${esc(t.complaint)}</blockquote><details><summary>Ticket details</summary><dl class="ticket-metadata"><dt>Ticket reference</dt><dd>${esc(t.id)}</dd><dt>Customer</dt><dd>${esc(t.customer_name)} · ${esc(t.customer_role)}</dd><dt>Customer ID</dt><dd>${esc(t.customer_id)}</dd><dt>Submitted</dt><dd>${date(t.submitted_at)}</dd>${t.related_reference ? `<dt>Related record</dt><dd>${esc(t.related_reference)}</dd>` : ""}</dl></details></section>`;
+  return `<section class="ticket-header"><div class="ticket-kicker"><span>${esc(t.customer_name)}</span><time title="${esc(date(t.submitted_at))}">${relativeDate(t.submitted_at)}</time></div><h2>${esc(t.subject)}</h2><blockquote>${esc(t.complaint)}</blockquote><details><summary>Ticket details</summary><dl class="ticket-metadata"><dt>Ticket reference</dt><dd>${esc(t.id)}</dd><dt>Customer</dt><dd>${esc(t.customer_name)} · ${esc(t.customer_role)}</dd><dt>Customer ID</dt><dd>${esc(t.customer_id)}</dd><dt>Submitted</dt><dd>${date(t.submitted_at)}</dd>${t.related_reference ? `<dt>Related record</dt><dd>${esc(t.related_reference)}</dd>` : ""}</dl></details><div class="actions"><button class="secondary" data-action="delete-ticket" data-id="${esc(t.id)}">Delete ticket</button></div></section>`;
 }
 function agent2Assessment(run) {
   if (!run || run.verification_mode !== "live-agent-2") return "";
@@ -211,6 +212,23 @@ root.addEventListener("click", async (event) => {
       selected = null;
       ticket = null;
     } else if (action === "refresh") await refresh();
+    else if (action === "delete-ticket") {
+      if (!confirm("Delete this ticket? This removes it from the marketplace database.")) return;
+      busy = true;
+      try {
+        await api("/tickets/" + el.dataset.id, undefined, "DELETE");
+        notice = "Ticket deleted.";
+        selected = null;
+        ticket = null;
+        await refresh();
+      } catch (e) {
+        error = e.message;
+      } finally {
+        busy = false;
+      }
+      render();
+      return;
+    }
     else if (action === "ticket") {
       workspaceRefreshVersion++;
       mobileWorkspacePane = "ticket";

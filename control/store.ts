@@ -19,6 +19,7 @@ export class Store {
   fixtures: ReturnType<typeof initializeFixtures>;
   ticketSource: string;
   remoteTickets?: () => Promise<any[]>;
+  remoteDeleteTicket?: (id: string) => Promise<boolean>;
   constructor(
     public dataDir: string,
     ticketSource = path.join(projectRoot, "data/local/market.sqlite"),
@@ -112,25 +113,30 @@ export class Store {
         .get(t.id),
     }));
   }
-  deleteTicket(id: string) {
+  async deleteTicket(id: string) {
     const proposal = this.db
       .prepare("SELECT id FROM proposals WHERE ticket_id=? LIMIT 1")
       .get(id);
     if (proposal)
       problem("This ticket has proposals attached and cannot be deleted.", 409);
-    if (this.remoteTickets)
-      problem("Deleting remote marketplace tickets is not supported.", 501);
-    if (!existsSync(this.ticketSource))
-      problem("Marketplace ticket not found.", 404);
-    const source = new DatabaseSync(this.ticketSource);
-    try {
-      const existing = source
-        .prepare("SELECT id FROM support_tickets WHERE id=?")
-        .get(id);
-      if (!existing) problem("Marketplace ticket not found.", 404);
-      source.prepare("DELETE FROM support_tickets WHERE id=?").run(id);
-    } finally {
-      source.close();
+    if (this.remoteTickets) {
+      if (!this.remoteDeleteTicket)
+        problem("Deleting remote marketplace tickets is not supported.", 501);
+      const ok = await this.remoteDeleteTicket(id);
+      if (!ok) problem("Marketplace ticket not found.", 404);
+    } else {
+      if (!existsSync(this.ticketSource))
+        problem("Marketplace ticket not found.", 404);
+      const source = new DatabaseSync(this.ticketSource);
+      try {
+        const existing = source
+          .prepare("SELECT id FROM support_tickets WHERE id=?")
+          .get(id);
+        if (!existing) problem("Marketplace ticket not found.", 404);
+        source.prepare("DELETE FROM support_tickets WHERE id=?").run(id);
+      } finally {
+        source.close();
+      }
     }
     this.db.prepare("DELETE FROM activity WHERE ticket_id=?").run(id);
     this.db.prepare("DELETE FROM tickets WHERE id=?").run(id);

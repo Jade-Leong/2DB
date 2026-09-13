@@ -9,3 +9,10 @@ export async function readMarketTickets(pool: Pool) {
   } catch (error) { await client.query("ROLLBACK"); throw error; }
   finally { client.release(); }
 }
+export async function deleteMarketTicket(pool: Pool, id: string) {
+  const { rowCount } = await pool.query(
+    "DELETE FROM two_db.support_tickets WHERE id=$1",
+    [id],
+  );
+  return (rowCount ?? 0) > 0;
+}

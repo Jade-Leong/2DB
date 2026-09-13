@@ -24,6 +24,7 @@ export function createControl(
     privateDir?: string;
     ticketSource?: string;
     remoteTickets?: () => Promise<any[]>;
+    remoteDeleteTicket?: (id: string) => Promise<boolean>;
     agentStatus?: typeof setupStatus;
     agent2Status?: typeof agent2Status;
     researchCheck?: typeof checkTavily;
@@ -33,6 +34,7 @@ export function createControl(
   const store = new Store(options.dataDir ?? defaultData, options.ticketSource),
     runner = new Runner(store);
   store.remoteTickets = options.remoteTickets;
+  store.remoteDeleteTicket = options.remoteDeleteTicket;
   const agent2 = new Agent2Service(store, runner, options.agent2Status);
   const agent = new AgentService(
     store,
@@ -207,8 +209,8 @@ export function createControl(
   app.post("/engineer-api/tickets/:id/import", async (req, res) =>
     res.json(await store.receiveTicket(String(req.params.id))),
   );
-  app.delete("/engineer-api/tickets/:id", (req, res) =>
-    res.json(store.deleteTicket(String(req.params.id))),
+  app.delete("/engineer-api/tickets/:id", async (req, res) =>
+    res.json(await store.deleteTicket(String(req.params.id))),
   );
   app.post("/engineer-api/proposals", async (req, res) => {
     await store.receiveTicket(String(req.body.ticketId));

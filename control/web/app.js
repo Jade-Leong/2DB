@@ -87,7 +87,7 @@ ${
 } </main><footer><span>2db / One builds. One verifies.</span><span>Local workspace · Live and scripted modes are recorded separately.</span></footer></div></div>`;
   const brand = root.querySelector(".logo");
   brand.setAttribute("aria-label", "2db home");
-  brand.innerHTML = '<img src="/logo-reference.png" alt="2DB — Find it. Verify it.">';
+  brand.innerHTML = '<img src="/brand-mark.svg" width="104" height="40" alt=""><span>2db</span>';
   window.TerminalMotion?.enhance(root);
 }
 function welcome() {

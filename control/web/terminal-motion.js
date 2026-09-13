@@ -2,51 +2,47 @@
   const seen = new Set();
   const progress = new Map();
   const motion = matchMedia("(prefers-reduced-motion: reduce)");
-  let observer, frame = 0;
-  const jobs = new Set();
-  function finish(job) {
-    job.chars.forEach(char => char.classList.add("is-visible"));
-    job.cursor?.classList.remove("is-cursor");
-    seen.add(job.element.dataset.type);
-    progress.delete(job.element.dataset.type);
-    jobs.delete(job);
+  let blocks = [], frame = 0, last = 0;
+
+  function reveal(block, count) {
+    block.cursor?.classList.remove("is-cursor");
+    for (; block.index < count; block.index++) block.chars[block.index].classList.add("is-visible");
+    progress.set(block.key, block.index);
+    block.cursor = block.chars[block.index - 1];
+    if (block.index === block.chars.length) seen.add(block.key);
+    else block.cursor?.classList.add("is-cursor");
   }
+
   function tick(time) {
-    const activeGroups = new Set();
-    for (const job of jobs) {
-      if (!job.element.isConnected) { jobs.delete(job); continue; }
-      if (activeGroups.has(job.group)) continue;
-      activeGroups.add(job.group);
-      if (!job.start) job.start = time;
-      const next = Math.min(job.chars.length, job.offset + Math.floor((time - job.start) / job.interval) + 1);
-      job.cursor?.classList.remove("is-cursor");
-      for (; job.index < next; job.index++) job.chars[job.index].classList.add("is-visible");
-      progress.set(job.element.dataset.type, job.index);
-      job.cursor = job.chars[next - 1];
-      job.cursor?.classList.add("is-cursor");
-      if (next === job.chars.length) seen.add(job.element.dataset.type);
-      if (next === job.chars.length && time - job.start > (job.chars.length - job.offset) * job.interval + 180) finish(job);
+    frame = 0;
+    const steps = Math.max(1, Math.min(6, Math.floor((time - last) / 18)));
+    if (time - last < 18) { frame = requestAnimationFrame(tick); return; }
+    last = time;
+    let typing = false;
+    for (const block of blocks) {
+      if (!block.el.isConnected || seen.has(block.key)) continue;
+      const rect = block.el.getBoundingClientRect();
+      // Each line fills as it travels from the lower viewport toward its center.
+      const fraction = Math.max(0, Math.min(1, (innerHeight * .85 - rect.top) / (innerHeight * .3)));
+      const target = Math.floor(block.chars.length * fraction);
+      if (rect.bottom < 0) { reveal(block, block.chars.length); continue; }
+      if (target <= block.index) continue;
+      if (typing) continue;
+      reveal(block, Math.min(target, block.index + steps));
+      typing = true;
     }
-    frame = jobs.size ? requestAnimationFrame(tick) : 0;
+    if (typing) frame = requestAnimationFrame(tick);
+  }
+  function schedule() {
+    if (!frame && !motion.matches) { last = performance.now(); frame = requestAnimationFrame(tick); }
   }
   window.TerminalMotion = {
     enhance(root) {
-      observer?.disconnect(); cancelAnimationFrame(frame); frame = 0;
-      jobs.clear();
-      if (motion.matches || !("IntersectionObserver" in window)) return;
-      observer = new IntersectionObserver(entries => {
-        entries.forEach(entry => {
-          if (!entry.isIntersecting) return;
-          const el = entry.target;
-          observer.unobserve(el);
-          const chars = [...el.querySelectorAll(".typing-char")];
-          const offset = progress.get(el.dataset.type) || 0;
-          jobs.add({ element: el, chars, index: offset, offset, start: 0, interval: 24, cursor: null, group: el.closest("article, section") || el });
-        });
-        if (jobs.size && !frame) frame = requestAnimationFrame(tick);
-      }, { threshold: .15, rootMargin: "0px 0px -48px 0px" });
+      cancelAnimationFrame(frame); frame = 0; blocks = [];
+      if (motion.matches) return;
       root.querySelectorAll("[data-type]").forEach(el => {
-        if (seen.has(el.dataset.type)) return;
+        const key = el.dataset.type;
+        if (seen.has(key)) return;
         const accessible = document.createElement("span");
         accessible.className = "typing-accessible";
         accessible.textContent = el.innerText;
@@ -60,16 +56,18 @@
           node.replaceWith(wrapper);
         });
         el.appendChild(accessible);
-        [...el.querySelectorAll(".typing-char")].slice(0, progress.get(el.dataset.type) || 0).forEach(char => char.classList.add("is-visible"));
-        observer.observe(el);
+        const block = { el, key, chars: [...el.querySelectorAll(".typing-char")], index: 0, cursor: null };
+        reveal(block, Math.min(progress.get(key) || 0, block.chars.length));
+        blocks.push(block);
       });
+      schedule();
     },
   };
+  addEventListener("scroll", schedule, { passive: true });
+  addEventListener("resize", schedule, { passive: true });
   motion.addEventListener("change", event => {
-    if (!event.matches) return;
-    observer?.disconnect(); cancelAnimationFrame(frame); frame = 0;
-    for (const job of jobs) finish(job);
-    document.querySelectorAll(".typing-char").forEach(char => char.classList.add("is-visible"));
-    document.querySelectorAll("[data-type]").forEach(el => seen.add(el.dataset.type));
+    if (!event.matches) { schedule(); return; }
+    cancelAnimationFrame(frame); frame = 0;
+    blocks.forEach(block => reveal(block, block.chars.length));
   });
 })();

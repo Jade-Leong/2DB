@@ -88,6 +88,7 @@ main { scroll-margin-top: 24px; }
 button { border: 1px solid #555; border-radius: 4px; color: #181818; background: #e4e4e4; padding: 9px 14px; font-weight: 500; }
 button:hover:not(:disabled) { filter: brightness(1.12); }
 button:disabled { opacity: .45; cursor: not-allowed; }
+#account-form button:not(:disabled) { background: #a8d5b5; border-color: #a8d5b5; color: #14251a; cursor: pointer; }
 .text { color: #c6c6c6; background: transparent; border-color: transparent; padding: 5px 0; }
 .secondary { background: #272727; color: #e0e0e0; border-color: #505050; }
 .danger { background: transparent; border-color: #664444; color: #efb4b4; }

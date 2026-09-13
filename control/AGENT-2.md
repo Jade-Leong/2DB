@@ -103,7 +103,7 @@ npx.cmd tsx control/tests/agent2-docker.check.ts
 
 ## Current limitations
 
-- No live Agent 2 run has been launched by the builder. A billable run begins only from the dashboard.
+- A hosted live Agent 2 test passed all eight mandatory checks, then ended Inconclusive because OpenAI returned HTTP 429 (no API credits remaining). Add credits to the configured API account before retrying. A successful live model assessment is not yet validated.
 - Missing-order-history and listing-photo scenarios are not ready in this milestone.
 - Live Agent 1 still depends on its Codex SDK response transport completing successfully.
 - There is no GitHub PR creation, merge, deployment, or automatic repair loop.

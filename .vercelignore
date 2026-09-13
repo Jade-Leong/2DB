@@ -3,6 +3,10 @@
 !api/**
 !control
 control/*
+!control/*.ts
+!control/*.mjs
+!control/agent
+!control/agent/**
 !control/web
 !control/web/**
 !deployment

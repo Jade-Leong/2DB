@@ -322,6 +322,12 @@ export function createControl(
         user_token_expires_at: expiresAt,
         refresh_token: oauth.refresh_token ? encrypt(github, oauth.refresh_token) : null,
       });
+      if (github.returnUrl) {
+        const destination = new URL(github.returnUrl);
+        destination.searchParams.set("github", "connected");
+        res.redirect(303, destination.href);
+        return;
+      }
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.send(`<!doctype html><meta charset="utf-8"><title>Connected to GitHub · 2DB Bridge</title><style>
 :root { color-scheme: dark; }

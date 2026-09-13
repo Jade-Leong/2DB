@@ -11,6 +11,7 @@ export interface GitHubConfig {
   clientSecret: string;
   privateKey: string;
   publicUrl: string;
+  returnUrl: string | null;
   tokenKey: Buffer;
   targetRepo: { owner: string; repo: string } | null;
 }
@@ -23,6 +24,7 @@ export function loadGitHubConfig(env: NodeJS.ProcessEnv = process.env): GitHubCo
   const privateKeyRaw = env.GITHUB_APP_PRIVATE_KEY;
   const tokenKeyRaw = env.GITHUB_TOKEN_KEY;
   const publicUrl = env.GITHUB_APP_PUBLIC_URL;
+  const returnUrl = env.GITHUB_APP_RETURN_URL?.trim() || null;
   if (!appId || !slug || !clientId || !clientSecret || !privateKeyRaw || !tokenKeyRaw || !publicUrl) return undefined;
   const privateKey = privateKeyRaw.includes("\\n") ? privateKeyRaw.replace(/\\n/g, "\n") : privateKeyRaw;
   const tokenKey = Buffer.from(tokenKeyRaw, "base64url");
@@ -34,7 +36,7 @@ export function loadGitHubConfig(env: NodeJS.ProcessEnv = process.env): GitHubCo
     if (owner && repo && /^[A-Za-z0-9._-]{1,100}$/.test(owner) && /^[A-Za-z0-9._-]{1,100}$/.test(repo))
       targetRepo = { owner, repo };
   }
-  return { appId, slug, clientId, clientSecret, privateKey, publicUrl: publicUrl.replace(/\/$/, ""), tokenKey, targetRepo };
+  return { appId, slug, clientId, clientSecret, privateKey, publicUrl: publicUrl.replace(/\/$/, ""), returnUrl, tokenKey, targetRepo };
 }
 
 export function encrypt(config: GitHubConfig, plaintext: string): string {

@@ -35,11 +35,12 @@ GITHUB_APP_CLIENT_ID
 GITHUB_APP_CLIENT_SECRET
 GITHUB_APP_PRIVATE_KEY
 GITHUB_APP_PUBLIC_URL=https://YOUR-2DB-HOST
+GITHUB_APP_RETURN_URL=https://twodb-steel.vercel.app/control/
 GITHUB_TOKEN_KEY
 PROPOSAL_TARGET_REPO=OWNER/REPOSITORY
 ```
 
-`GITHUB_TOKEN_KEY` must decode from base64url to exactly 32 random bytes. Generate one without committing it:
+`GITHUB_APP_PUBLIC_URL` is the controller's public Cloudflare origin and receives the GitHub callback. `GITHUB_APP_RETURN_URL` is the deployed dashboard; after securely exchanging and storing the OAuth code, the controller redirects the browser there. `GITHUB_TOKEN_KEY` must decode from base64url to exactly 32 random bytes. Generate one without committing it:
 
 ```bash
 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"

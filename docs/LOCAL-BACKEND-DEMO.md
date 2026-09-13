@@ -14,6 +14,8 @@ npx.cmd vercel env pull .env --environment=production
 
 Set `GITHUB_APP_PUBLIC_URL` in `.env` to the current public controller origin. With a Quick Tunnel, this is its current `https://<random>.trycloudflare.com` URL and must be updated whenever that URL changes. A named tunnel avoids that recurring change. The GitHub App callback URL must be the same origin followed by `/engineer-api/github/callback`.
 
+Set `GITHUB_APP_RETURN_URL=https://twodb-steel.vercel.app/control/`. GitHub first returns to the controller callback so the OAuth code can be exchanged securely; the controller then redirects the browser to this deployed dashboard URL.
+
 ```powershell
 $env:CONTROL_PUBLIC = "1"
 $env:CONTROL_ALLOWED_ORIGINS = "https://twodb-steel.vercel.app"

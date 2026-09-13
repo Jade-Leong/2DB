@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { forwardModelResponse, ModelRequestError } from "./model-transport";
 import type { Store } from "../store";
 import { now, projectRoot, problem } from "../paths";
 import { hash, revision, sourceFiles, harnessRevision } from "../snapshots";
@@ -193,13 +194,15 @@ export class AgentService {
       }
       const signal = this.abort.signal;
       void this.investigate(id, ticket, status, signal)
-        .catch(() =>
+        .catch((error) =>
           this.finish(
             id,
             signal.aborted ? "Cancelled" : "Failed",
             signal.aborted
               ? "Investigation cancelled or duration limit reached. No candidate was executed."
-              : "Investigation failed. No successful reproduction or fix is inferred. Review recorded actions and setup.",
+              : error instanceof ModelRequestError
+                ? error.message
+                : "Investigation failed. No successful reproduction or fix is inferred. Review recorded actions and setup.",
           ),
         )
         .finally(() => {
@@ -389,39 +392,9 @@ export class AgentService {
           signal,
           redirect: "error",
         });
-        if (!response.ok) {
-          let code = "unclassified";
-          try {
-            const body = await response.json() as any;
-            const allowed = ["insufficient_quota", "rate_limit_exceeded", "model_not_found", "invalid_api_key", "unsupported_parameter", "unsupported_value", "invalid_json_schema", "invalid_request_error", "permission_denied"];
-            if (allowed.includes(body.error?.code)) code = body.error.code;
-          } catch {}
-          this.event(id, "Model request failed", "The model API rejected the request. No raw response is logged.", { httpStatus: response.status, code });
-          throw new Error(
-            "Model API rejected this request; no response body is exposed.",
-          );
-        }
-        this.event(id, "Model response", "The API accepted the request; awaiting a complete SDK action.", { httpStatus: response.status });
-        model!.send({
-          type: "model-response-start",
-          id: message.id,
-          status: response.status,
-          contentType:
-            response.headers.get("content-type") || "application/json",
-        });
-        if (response.body) {
-          const reader = response.body.getReader();
-          for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            model!.send({
-              type: "model-response-chunk",
-              id: message.id,
-              body: Buffer.from(value).toString("base64"),
-            });
-          }
-        }
-        model!.send({ type: "model-response-end", id: message.id });
+        if (response.ok)
+          this.event(id, "Model response", "The API opened a response stream; completion and any streamed errors are checked separately.", { httpStatus: response.status });
+        await forwardModelResponse(response, message.id, message => model!.send(message));
       };
       const turn = (prompt: string) =>
         new Promise<any>((resolve, reject) => {
@@ -436,9 +409,14 @@ export class AgentService {
           model!.onFailure = fail;
           model!.onMessage = (message) => {
             if (message.type === "model-request") {
-              void proxy(message).catch(() => {
-                this.event(id, "Model request failed", "Model broker request did not complete. Check any preceding HTTP status; otherwise this may be a network or transport failure.");
-                fail(new Error("Model service request failed"));
+              void proxy(message).catch((error) => {
+                if (error instanceof ModelRequestError) {
+                  this.event(id, "Model request failed", error.message, { httpStatus: error.httpStatus, code: error.code });
+                  fail(error);
+                } else {
+                  this.event(id, "Model request failed", "Model broker request did not complete. Check any preceding API error; otherwise this may be a network or transport failure.");
+                  fail(new Error("Model service request failed"));
+                }
               });
               return;
             }

@@ -131,6 +131,10 @@ Do not reset Loop Market or delete the controller database to retry an investiga
 ```powershell
 npm.cmd run control:check
 npm.cmd run control:agent:test
+node --import tsx --test control/tests/model-transport.test.ts
+# These checks require the prepared Docker image; neither calls a live model:
+npx.cmd tsx control/tests/worker-stream.check.ts
+npx.cmd tsx control/tests/worker-failure.check.ts
 # Stop the manual marketplace before this existing integration suite:
 npm.cmd run control:test
 ```
@@ -138,3 +142,9 @@ npm.cmd run control:test
 The Agent 1 tests use a separate controller database, explicit test-engineer session, injected setup failures, and clearly identified synthetic evidence. They make no paid model requests and do not approve real dashboard proposals. They test authorization, setup blocking, duplicate/cancel behavior, path/symlink restrictions, evidence gates, exact approval invalidation, preserved originals, and desktop/mobile UI. The existing controller suite still runs real baseline/unchanged/fixed Playwright scenarios.
 
 Actual results and setup blockers are recorded in [the milestone-3 operator report](../operator/MILESTONE-3-RESULTS.md). No live model attempt, agent-discovered fix, or tested generated candidate is claimed until an actual authenticated, isolated run finishes. No real dashboard proposal is automatically approved.
+
+### Model failures after HTTP 200
+
+Opening an HTTP response stream does not mean the model completed successfully. The controller checks streamed `response.failed`, `error`, and `response.incomplete` events before forwarding them to the SDK. Credit exhaustion, quota limits, and other recognized errors produce fixed, actionable investigation messages; raw provider error text is not persisted. A stream without `response.completed` is incomplete and cannot establish a successful action.
+
+The earlier generic `sdk_transport` failure can be reproduced by sending a synthetic credit-exhaustion event through the actual Codex worker. The historical logs did not retain its upstream error, so its exact original cause remains unconfirmed. The later hosted Agent 2 attempt explicitly confirmed exhausted API credits. Adding credits is still required for a successful live API run; this error-handling fix does not supply credits or prove autonomous investigation.

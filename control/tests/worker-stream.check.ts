@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { JsonProcess, hardening, imageTag, docker } from "../agent/docker";
 import { actionSchema } from "../agent/policy";
+import { forwardModelResponse } from "../agent/model-transport";
 
 // Synthetic transport fixture only: never forwards a request to a model service.
 const name = "twodb-streamcheck-" + randomUUID();
@@ -33,12 +34,14 @@ try {
         if (message.type === "model-request") {
           const request = JSON.parse(Buffer.from(message.body, "base64").toString());
           assert.equal(request.stream, true);
-          worker.send({ type: "model-response-start", id: message.id, status: 200, contentType: "text/event-stream" });
           const stream = Buffer.from(events.map((e, sequence_number) => `event: ${e.type}\ndata: ${JSON.stringify({ ...e, sequence_number })}\n\n`).join(""));
           // Deliberately split JSON, SSE boundaries and UTF-8 sequences across IPC chunks.
-          for (let offset = 0; offset < stream.length; offset += 7)
-            worker.send({ type: "model-response-chunk", id: message.id, body: stream.subarray(offset, offset + 7).toString("base64") });
-          worker.send({ type: "model-response-end", id: message.id });
+          const response = new Response(new ReadableStream({ start(controller) {
+            for (let offset = 0; offset < stream.length; offset += 7)
+              controller.enqueue(stream.subarray(offset, offset + 7));
+            controller.close();
+          } }), { headers: { "content-type": "text/event-stream" } });
+          void forwardModelResponse(response, message.id, value => worker.send(value)).catch(fail);
         }
         if (message.type === "usage") usage = message.usage;
         if (message.type === "failed") fail(new Error("Worker failure: " + message.category));

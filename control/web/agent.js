@@ -6,8 +6,10 @@ let agentStatus = null,
   investigation = null,
   scriptedInvestigations = [],
   scriptedInvestigation = null;
+let backendStatus = "offline";
 async function refreshAgent() {
   const target = selected?.ticket_id || ticket?.id, session = token;
+  backendStatus = await fetch(window.twoDbBackendUrl("/api/health"), { signal: AbortSignal.timeout(12000) }).then(r => r.ok ? "connected" : "offline").catch(() => "offline");
   const values = await Promise.all([api("/agent/status"), api("/agent2/status"), api("/investigations"), api("/scripted-investigations"), api("/research/status")]);
   const latest = values[2].find(r => r.ticket_id === target);
   const detail = latest ? await api("/investigations/" + latest.id) : null;
@@ -67,5 +69,6 @@ function ticketAgentPanel(t) {
   const run = investigation?.ticket_id === t.id ? investigation : null;
   const p = selected?.ticket_id === t.id ? selected : null;
   const active = Boolean(run && !run.finished_at), verifying = runningVerification(p);
-  return `${nextAction(t, run, p)}<section class="ticket-agent-controls" aria-label="Agents for selected ticket"><details class="agent-disclosure" data-agent-detail="build"><summary>${spinner(active)}<span class="agent-summary"><span class="agent-summary-title"><strong>Agent 1 · Build</strong>${badge(stageName(run?.state || (p ? "Proposal ready" : "Not started")))}</span><span class="agent-summary-message">${esc(run?.message || "Reproduce the issue and propose a change.")}</span></span><span class="disclosure-arrow" aria-hidden="true">›</span></summary><div class="agent-body">${buildFindings(t, run, p)}${p ? reviewProposal(p) : ""}</div></details><details class="agent-disclosure" data-agent-detail="verify"><summary>${spinner(verifying)}<span class="agent-summary"><span class="agent-summary-title"><strong>Agent 2 · Verify</strong>${badge(stageName(p?.runs?.[0]?.state || (p ? "Ready to verify" : "Waiting for proposal")))}</span><span class="agent-summary-message">${esc(p?.runs?.[0]?.message || "Independent checks flag issues before human approval.")}</span></span><span class="disclosure-arrow" aria-hidden="true">›</span></summary><div class="agent-body">${verificationFindings(p)}</div></details></section>`;
+  const backendBanner = backendStatus === "connected" ? `<p class="alert" role="status">Agent backend connected</p>` : `<p class="alert error" role="status">Agent backend is offline. Start the local 2DB runtime to continue.</p>`;
+  return `${backendBanner}${nextAction(t, run, p)}<section class="ticket-agent-controls" aria-label="Agents for selected ticket"><details class="agent-disclosure" data-agent-detail="build"><summary>${spinner(active)}<span class="agent-summary"><span class="agent-summary-title"><strong>Agent 1 · Build</strong>${badge(stageName(run?.state || (p ? "Proposal ready" : "Not started")))}</span><span class="agent-summary-message">${esc(run?.message || "Reproduce the issue and propose a change.")}</span></span><span class="disclosure-arrow" aria-hidden="true">›</span></summary><div class="agent-body">${buildFindings(t, run, p)}${p ? reviewProposal(p) : ""}</div></details><details class="agent-disclosure" data-agent-detail="verify"><summary>${spinner(verifying)}<span class="agent-summary"><span class="agent-summary-title"><strong>Agent 2 · Verify</strong>${badge(stageName(p?.runs?.[0]?.state || (p ? "Ready to verify" : "Waiting for proposal")))}</span><span class="agent-summary-message">${esc(p?.runs?.[0]?.message || "Independent checks flag issues before human approval.")}</span></span><span class="disclosure-arrow" aria-hidden="true">›</span></summary><div class="agent-body">${verificationFindings(p)}</div></details></section>`;
 }

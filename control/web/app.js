@@ -16,6 +16,13 @@ let token = sessionStorage.getItem("2db-engineer-session") || "",
   githubSelectedInstall = null,
   githubBusy = false,
   proposalPrs = {};
+const configuredBackend = window.__TWO_DB_API_BASE_URL__ || "";
+const backendBase = configuredBackend || (window.__TWO_DB_HOSTED__ ? null : location.origin);
+const backendUrl = (path) => {
+  if (!backendBase) throw new Error("Agent backend is offline. Start the local 2DB runtime to continue.");
+  return backendBase.replace(/\/$/, "") + path;
+};
+window.twoDbBackendUrl = backendUrl;
 const esc = (value) =>
   String(value ?? "").replace(
     /[&<>"']/g,
@@ -28,14 +35,17 @@ const short = (value) => (value ? value.slice(0, 12) : "—");
 const date = (value) => (value ? new Date(value).toLocaleString() : "—");
 async function api(url, data, method) {
   const verb = method || (data === undefined ? "GET" : "POST");
-  const res = await fetch("/engineer-api" + url, {
+  let res;
+  try { res = await fetch(backendUrl("/engineer-api" + url), {
     method: verb,
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     ...(data === undefined ? {} : { body: JSON.stringify(data) }),
-  });
+  }); } catch (error) {
+    throw new Error("Agent backend is offline. Start the local 2DB runtime to continue.");
+  }
   if (res.status === 401 && url !== "/login") {
       token = "";
       workspaceMemory.clear();
@@ -222,7 +232,7 @@ root.addEventListener("click", async (event) => {
   notice = "";
   try {
     if (artifact) {
-      const response = await fetch("/engineer-api" + artifact, {
+      const response = await fetch(backendUrl("/engineer-api" + artifact), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok)

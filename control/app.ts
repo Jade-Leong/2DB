@@ -90,6 +90,18 @@ export function createControl(
   app.use(express.json({ limit: "16kb" }));
   app.use((req, res, next) => {
     const host = `127.0.0.1:${req.socket.localPort}`;
+    const allowedOrigins = new Set((process.env.CONTROL_ALLOWED_ORIGINS ?? `http://${host}`).split(",").map((origin) => origin.trim()).filter(Boolean));
+    const origin = typeof req.headers.origin === "string" ? req.headers.origin : "";
+    if (origin && allowedOrigins.has(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Vary", "Origin");
+      res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Demo-Account");
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    }
+    if (req.method === "OPTIONS") {
+      if (!origin || !allowedOrigins.has(origin)) { res.status(403).json({ error: "Cross-origin controller requests are not allowed." }); return; }
+      res.status(204).end(); return;
+    }
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cache-Control", "no-store");
     res.setHeader(
@@ -99,11 +111,12 @@ export function createControl(
     // The GitHub OAuth callback is reached by browser redirect from github.com. It has no
     // Authorization header — the `state` param (verified below) is the CSRF defense.
     const githubCallback = req.method === "GET" && req.path === "/engineer-api/github/callback";
-    if (!githubCallback && req.headers.host !== host) {
+    const publicAccess = process.env.CONTROL_PUBLIC === "1";
+    if (!githubCallback && !publicAccess && req.headers.host !== host) {
       res.status(403).json({ error: "Use the loopback dashboard address." });
       return;
     }
-    if (!githubCallback && req.headers.origin && req.headers.origin !== `http://${host}`) {
+    if (!githubCallback && origin && !allowedOrigins.has(origin)) {
       res
         .status(403)
         .json({ error: "Cross-origin controller requests are not allowed." });
@@ -112,6 +125,7 @@ export function createControl(
     next();
   });
   app.get("/health", (_req, res) => res.json({ ok: true, app: "2DB" }));
+  app.get("/api/health", (_req, res) => res.json({ ok: true, app: "2DB" }));
   mountAccountRoutes(app, accountAuth, issueSession);
   app.post("/engineer-api/login", (req, res) => {
     const address = req.socket.remoteAddress ?? "local",

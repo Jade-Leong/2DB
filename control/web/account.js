@@ -6,6 +6,9 @@ const accountHome = new URL(".", document.currentScript.src).pathname;
 let accountMessage = "";
 let accountError = "";
 let accountBusy = false;
+const configuredBackend = window.__TWO_DB_API_BASE_URL__ || "";
+const backendBase = configuredBackend || (window.__TWO_DB_HOSTED__ ? null : location.origin);
+const backendUrl = (path) => backendBase ? backendBase.replace(/\/$/, "") + path : null;
 
 async function readApiResponse(response) {
   let result;
@@ -24,7 +27,7 @@ async function loadAccountConfig() {
   accountConfigLoading = true;
   accountConfigError = "";
   try {
-    const response = await fetch("/auth-api/config", { signal: AbortSignal.timeout(12000), cache: "no-store" });
+    const response = await fetch(backendUrl("/auth-api/config") || "data:application/json,%7B%7D", { signal: AbortSignal.timeout(12000), cache: "no-store" });
     const result = await readApiResponse(response);
     if (typeof result?.enabled !== "boolean") throw new Error("Invalid account configuration response");
     accountConfig = result;
@@ -93,7 +96,7 @@ document.addEventListener("submit", async (event) => {
   const submit = event.target.querySelector("button");
   submit.disabled = true; submit.textContent = "Please wait…";
   try {
-    const response = await fetch(`/auth-api/${accountMode}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: data.get("email"), password: data.get("password") }) });
+    const response = await fetch(backendUrl(`/auth-api/${accountMode}`) || "data:application/json,%7B%7D", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: data.get("email"), password: data.get("password") }) });
     const result = await readApiResponse(response);
     if (accountMode === "signup") { accountMessage = result.message; accountMode = "login"; }
     else {

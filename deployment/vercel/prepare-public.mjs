@@ -9,7 +9,9 @@ mkdirSync(path.join(publicRoot,'control'),{recursive:true});
 for(const name of ['index.html','style.css','terminal.css','app.js','agent.js','account.js','terminal-motion.js','workspace.js']) {
   let source=readFileSync(path.join(projectRoot,'control/web',name),'utf8');
   if(name==='index.html')source=source.replaceAll('href="/style.css"','href="/control/style.css"').replaceAll('href="/terminal.css"','href="/control/terminal.css"').replaceAll('src="/agent.js"','src="/control/agent.js"').replaceAll('src="/account.js"','src="/control/account.js"').replaceAll('src="/terminal-motion.js"','src="/control/terminal-motion.js"').replaceAll('src="/workspace.js"','src="/control/workspace.js"').replaceAll('src="/app.js"','src="/control/app.js"');
+  if(name==='index.html')source=source.replace('</head>',`<script>window.__TWO_DB_HOSTED__=true;window.__TWO_DB_API_BASE_URL__=${JSON.stringify(process.env.VITE_TWO_DB_API_BASE_URL||'')};</script></head>`);
   if(name==='app.js')source=source.replaceAll('href="/"','href="/control/"').replaceAll('http://127.0.0.1:3001','/').replaceAll('src="/brand-mark.svg"','src="/control/brand-mark.svg"').replaceAll('Local environment','Hosted test preview');
+  if(name==='index.html')source=source.replace('</head>',`<script>window.__TWO_DB_HOSTED__=true;window.__TWO_DB_API_BASE_URL__=${JSON.stringify(process.env.VITE_TWO_DB_API_BASE_URL||'')};</script></head>`);
   writeFileSync(path.join(publicRoot,'control',name),source);
 }
 cpSync(path.join(projectRoot,'control/web/brand-mark.svg'),path.join(publicRoot,'control/brand-mark.svg'));

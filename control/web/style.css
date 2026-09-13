@@ -400,7 +400,7 @@ header {
 }
 .welcome {
   padding: 40px 34px;
-  background: linear-gradient(135deg, #fff, #f0f2ff);
+  background: #fff;
   min-height: 280px;
 }
 .welcome h2 {

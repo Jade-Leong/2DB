@@ -30,29 +30,42 @@ async function api(url, data) {
   });
   if (res.status === 401 && url !== "/login") {
       token = "";
+      workspaceMemory.clear();
       sessionStorage.removeItem("2db-engineer-session");
       throw new Error("Your session has expired. Please sign in again.");
   }
   return readApiResponse(res);
 }
+let workspaceRefreshVersion = 0;
 async function refresh() {
   if (!token) return;
-  [inbox, imported, proposals, testSummary] = await Promise.all([
+  const version = ++workspaceRefreshVersion, session = token;
+  const result = await Promise.all([
     api("/inbox"),
     api("/tickets"),
     api("/proposals"),
     api("/test-summary"),
   ]);
+  if (version !== workspaceRefreshVersion || token !== session) return;
+  [inbox, imported, proposals, testSummary] = result;
   if (!selected && ticket) {
     const latest = proposals.find((p) => p.ticket_id === ticket.id);
-    if (latest) selected = await api(`/proposals/${latest.id}`);
+    if (latest) {
+      const updated = await api(`/proposals/${latest.id}`);
+      if (version !== workspaceRefreshVersion || token !== session) return;
+      selected = updated;
+    }
   }
-  if (selected) selected = await api(`/proposals/${selected.id}`);
+  if (selected) {
+    const id = selected.id, updated = await api(`/proposals/${id}`);
+    if (version !== workspaceRefreshVersion || selected?.id !== id || token !== session) return;
+    selected = updated;
+  }
   await refreshAgent();
   render();
 }
 function statusClass(s) {
-  return /Verified|passed/.test(s)
+  return /inconclusive|cancelled|needs information/i.test(s) ? "warning" : /Verified|passed/.test(s)
     ? "good"
     : /Failed|failed|Rejected/.test(s)
       ? "bad"
@@ -71,55 +84,25 @@ function allTickets() {
   for (const t of inbox) if (!map.has(t.id)) map.set(t.id, t);
   return [...map.values()];
 }
-const agentDisclosureState = new Map();
 function render() {
-  root.querySelectorAll("details[data-agent-detail]").forEach((el) => agentDisclosureState.set(el.dataset.agentDetail, el.open));
+  const previousWorkspace = captureWorkspace();
   const p = selected,
     t = p?.ticket || ticket;
   const accountPage = !token && ["/login", "/signup"].includes(location.pathname);
-  root.innerHTML = `<div class="shell"><div class="terminal-titlebar"><span class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></span><span>2db — engineer workspace</span><span class="titlebar-spacer"></span></div><div class="workspace"><header><a class="logo" href="/">2db</a><nav aria-label="Main navigation">${!token ? `<a href="${accountPage ? "/#agents" : "#agents"}">The agents</a>` : ""}<a href="${token ? "#review-workspace" : "/login"}">${token ? "Workspace" : "Sign in"}</a>${!token ? '<a href="/signup">Sign up</a>' : ""}<a href="http://127.0.0.1:3001" target="_blank" rel="noreferrer">Loop Market ↗</a></nav><div class="engineer">${token ? '<span>you</span><button class="text" data-action="logout">Sign out</button>' : '<span class="muted">Local workspace</span>'}</div></header>${token || accountPage ? "" : `<section class="terminal-hero"><span class="breadcrumb">2db / engineer workspace</span><h1 data-type="hero-title">One builds.<br><span>One verifies.</span></h1><p data-type="hero-copy">Two separate agents for your engineering workflow.<br>One proposes the change. One verifies it. You decide what ships.</p><a class="hero-link" href="${token ? "#review-workspace" : "/signup"}">${token ? "Open your workspace" : "Get started"} ↓</a></section>${agentOverview()}`}<main id="review-workspace">${error ? `<div class="alert error" role="alert">${esc(error)}</div>` : ""}${notice ? `<div class="alert" role="status">${esc(notice)}</div>` : ""}
+  root.innerHTML = `<div class="shell ${token ? "signed-in" : ""}"><div class="terminal-titlebar"><span class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></span><span>2db — engineer workspace</span><span class="titlebar-spacer"></span></div><div class="workspace"><header><a class="logo" href="/">2db</a><nav aria-label="Main navigation">${!token ? `<a href="${accountPage ? "/#agents" : "#agents"}">The agents</a>` : ""}<a href="${token ? "#review-workspace" : "/login"}">${token ? "Workspace" : "Sign in"}</a>${!token ? '<a href="/signup">Sign up</a>' : ""}<a href="http://127.0.0.1:3001" target="_blank" rel="noreferrer">Loop Market ↗</a></nav><div class="engineer">${token ? '<span>you</span><button class="text" data-action="logout">Sign out</button>' : '<span class="muted">Local workspace</span>'}</div></header>${token || accountPage ? "" : `<section class="terminal-hero"><span class="breadcrumb">2db / engineer workspace</span><h1 data-type="hero-title">One builds.<br><span>One verifies.</span></h1><p data-type="hero-copy">Two separate agents for your engineering workflow.<br>One proposes the change. One verifies it. You decide what ships.</p><a class="hero-link" href="${token ? "#review-workspace" : "/signup"}">${token ? "Open your workspace" : "Get started"} ↓</a></section>${agentOverview()}`}<main id="review-workspace">${error ? `<div class="alert error" role="alert">${esc(error)}</div>` : ""}${notice ? `<div class="alert" role="status">${esc(notice)}</div>` : ""}
 ${
   !token
     ? accountView()
-    : `<div class="review-layout"><section class="inbox panel"><div class="section-title"><h2>Ticket inbox</h2><button class="text" data-action="refresh">Refresh ↻</button></div><p class="small muted">Real Loop Market complaints. Imported read-only.</p>${
-        allTickets().length
-          ? allTickets()
-              .map(
-                (x) =>
-                  `<button class="ticket ${t?.id === x.id ? "chosen" : ""}" data-action="ticket" data-id="${esc(x.id)}"><span class="ticket-person">${esc(x.customer_name)} <span>${x.imported ? "IMPORTED" : "NEW"}</span></span><strong>${esc(x.subject)}</strong><p>${esc(x.complaint)}</p><small>${date(x.submitted_at)}</small>${ticketAgentActivity(x)}</button>`,
-              )
-              .join("")
-          : '<div class="empty small">No submitted complaints yet.<br><br>Open Loop Market → Support, submit a complaint, then refresh this inbox.</div>'
-      }<div class="section-title proposals-title"><h2>Local proposals</h2><span>${proposals.length}</span></div>${proposals.map((x) => `<button class="proposal-link ${p?.id === x.id ? "chosen" : ""}" data-action="proposal" data-id="${x.id}"><strong>${x.kind === "agent-generated" ? "Agent-generated proposal" : x.kind === "discount-fix" ? "Discount sample fix" : "Unchanged negative control"}</strong><small>${esc(x.customer_name)} · ${short(x.candidate_revision)}</small>${badge(x.state)}</button>`).join("") || '<p class="muted small">Choose a ticket to create a developer-authored sample proposal.</p>'}</section><div class="detail-column">${t ? ticketView(t) + ticketAgentPanel(t) : '<section class="panel"><h2>Select a ticket</h2><p class="muted">Choose a ticket from the inbox to start or review its agents.</p></section>'}</div></div>`
-} </main><footer><span>2db / One builds. One verifies.</span><span>Local workspace · Live and scripted modes are recorded separately.</span></footer></div></div>`;
+    : workspaceView(t)
+} </main><footer><span>2db / One builds. One verifies.</span><span>Independent agents. Your approval.</span></footer></div></div>`;
   const brand = root.querySelector(".logo");
   brand.setAttribute("aria-label", "2db home");
   brand.innerHTML = '<img src="/brand-mark.svg" width="104" height="40" alt=""><span>2db</span>';
-  root.querySelectorAll("details[data-agent-detail]").forEach((el) => {
-    if (agentDisclosureState.has(el.dataset.agentDetail)) el.open = agentDisclosureState.get(el.dataset.agentDetail);
-  });
+  restoreWorkspace(previousWorkspace, t);
   window.TerminalMotion?.enhance(root);
 }
-function welcome() {
-  return `<section class="panel welcome"><span class="eyebrow">REPRODUCE. REVIEW. VERIFY.</span><h2>One complaint.<br>A clear chain of evidence.</h2><p>Choose a submitted ticket to review its original words, inspect a real source diff, and approve an exact revision for local testing.</p><div class="steps"><span>1 &nbsp; Review proposal</span><span>2 &nbsp; Approve revision</span><span>3 &nbsp; Compare evidence</span></div></section>`;
-}
 function ticketView(t) {
-  return `<section class="panel"><div class="section-title"><span class="eyebrow">ORIGINAL CUSTOMER COMPLAINT</span><span class="small muted">${date(t.submitted_at)}</span></div><h2>${esc(t.subject)}</h2><blockquote>${esc(t.complaint)}</blockquote><div class="ticket-meta"><span>${esc(t.customer_name)} · ${esc(t.customer_role)}<small>Customer ID: ${esc(t.customer_id)}</small></span><span>Ticket reference<small>${esc(t.id)}</small></span></div><p class="small muted">Related record: ${t.related_reference ? esc(t.related_reference) : "not provided by the existing ticket schema"}. Original complaint preserved without a diagnosis.</p></section>`;
-}
-function proposalView(p) {
-  const latest = p.runs[0],
-    approval = p.approvals.find((a) => a.id === p.current_approval),
-    waiting = p.state === "Awaiting engineer approval",
-    running = ["Verification running", "Live Agent 2 running"].includes(p.state);
-  return `<section class="panel"><div class="section-title"><div><span class="eyebrow">LOCAL CHANGE PROPOSAL</span><h2>${p.kind === "agent-generated" ? "Agent-generated proposed fix" : p.kind === "discount-fix" ? "Discount payment correction" : "Unchanged negative control"}</h2></div>${badge(p.state)}</div><div class="author-label">${esc(p.author)} · Revision ${p.revision_number}</div><div class="mode-strip"><strong>Investigation origin:</strong> ${badge(p.investigationOrigin)} <strong>Verification:</strong> ${badge(p.execution)}</div><p>${esc(p.explanation)}</p>${p.agentMetadata ? `<details><summary>Agent explanation, source references, and uncertainties</summary><p><strong>Expected behavior:</strong> ${esc(p.agentMetadata.expected)}</p><pre>${esc(JSON.stringify(p.agentMetadata.conclusion, null, 2))}</pre><p class="small muted">Agent explanation is not proof of correctness. Trusted reproduction evidence is available in the investigation panel above.</p></details>` : ""}<div class="hash-grid">${hashLabel("BASE SNAPSHOT · SHA-256", p.base_revision)}${hashLabel("CANDIDATE SNAPSHOT · SHA-256", p.candidate_revision)}</div><details class="technical"><summary>Frozen requirements and harness identity</summary>${hashLabel("REQUIREMENTS", p.requirements_hash)}${hashLabel("TRUSTED HARNESS", p.harness_hash)}</details><div class="diff-title"><span>Source diff</span><span>${p.kind === "agent-generated" ? "Controller-computed source diff" : "Reviewed developer fixture"}</span></div><pre class="diff">${p.diff
-    .split("\n")
-    .map(
-      (line) =>
-        `<span class="${line.startsWith("+") ? "add" : line.startsWith("-") ? "remove" : ""}">${esc(line)}\n</span>`,
-    )
-    .join(
-      "",
-    )}</pre><details ${p.kind === "agent-generated" ? "hidden" : ""}><summary>Reproduction workflow</summary><p>Use Maya, add the $48 knit to the bag, enter LOOP20, then inspect the receipt and the server-recorded payment. Do not rely on the independently broken order-history page.</p><p class="small muted">${latest ? "Measured evidence appears below." : "No measured reproduction evidence yet. Approval allows the scripted baseline and candidate runs to gather it."}</p></details><p class="small muted">Changing the candidate invalidates approval and previous evidence for this proposal.</p></section><section class="panel gate"><span class="eyebrow">HUMAN APPROVAL GATE</span><h2>Your revision. Your decision.</h2><p class="muted">Testing permission is recorded against the full candidate hash above. It is not permission to merge or deploy.</p>${approval ? `<div class="approval-record">Approved by ${esc(approval.reviewer)} · ${date(approval.created_at)}<code>${esc(approval.revision)}</code></div>` : ""}<div class="actions">${["Proposal ready", "Changes requested"].includes(p.state) ? '<button data-action="submit">Submit revision for engineer approval</button>' : ""}<button data-action="approve" ${!waiting || busy ? "disabled" : ""}>Approve this revision for testing</button><button class="secondary" data-action="changes" ${running ? "disabled" : ""}>Request changes</button><button class="danger" data-action="reject" ${running ? "disabled" : ""}>Reject proposal</button></div><label class="review-note">Review note (optional)<textarea id="review-note" rows="2" maxlength="2000" placeholder="Explain a change request or rejection."></textarea></label><div class="verify-row"><div><strong>Independent verification</strong><p class="small muted">Live Agent 2 explores the change in the browser and runs all eight trusted checks.</p></div><div class="actions"><button data-action="verify-live" ${!approval || running || busy || agent2Status?.state !== "Ready" ? "disabled" : ""}>${running ? "Verification running…" : "Verify with live Agent 2"}</button>${latest?.state === "Live Agent 2 running" ? `<button class="danger" data-action="cancel-agent2" data-id="${esc(latest.id)}">Cancel Agent 2</button>` : ""}</div></div><p class="small muted">Stop Loop Market with Ctrl+C before verification. Port 3001 must be free; 2DB remains running on its own port.</p></section>${researchCitationsView(p.agentMetadata?.research)}${evidenceView(p, latest)}<section class="panel"><div class="section-title"><h2>Activity history</h2><span class="small muted">Persisted timestamps</span></div><ol class="timeline">${p.activity.map((e) => `<li><span class="dot"></span><div><strong>${esc(e.event)}</strong><p>${esc(e.details)}</p><small>${esc(e.actor)} · ${date(e.created_at)}</small></div></li>`).join("")}</ol></section>`;
+  return `<section class="ticket-header"><div class="ticket-kicker"><span>${esc(t.customer_name)}</span><time title="${esc(date(t.submitted_at))}">${relativeDate(t.submitted_at)}</time></div><h2>${esc(t.subject)}</h2><blockquote>${esc(t.complaint)}</blockquote><details><summary>Ticket details</summary><dl class="ticket-metadata"><dt>Ticket reference</dt><dd>${esc(t.id)}</dd><dt>Customer</dt><dd>${esc(t.customer_name)} · ${esc(t.customer_role)}</dd><dt>Customer ID</dt><dd>${esc(t.customer_id)}</dd><dt>Submitted</dt><dd>${date(t.submitted_at)}</dd>${t.related_reference ? `<dt>Related record</dt><dd>${esc(t.related_reference)}</dd>` : ""}</dl></details></section>`;
 }
 function agent2Assessment(run) {
   if (!run || run.verification_mode !== "live-agent-2") return "";
@@ -127,7 +110,7 @@ function agent2Assessment(run) {
   try {
     assessment = run.agent_assessment ? JSON.parse(run.agent_assessment) : null;
   } catch {}
-  return `<details ${assessment ? "open" : ""}><summary>Live Agent 2 written assessment</summary><pre>${esc(JSON.stringify(assessment, null, 2))}</pre><p class="small muted">The AI assessment is separate from the executed checks and controller-calculated workflow status.</p></details>`;
+  return assessment ? `<div class="assessment-summary"><h3>Agent 2 findings</h3><p>${esc(assessment.summary || "No written summary provided.")}</p><details><summary>Technical details · full assessment</summary><pre>${esc(JSON.stringify(assessment, null, 2))}</pre></details></div>` : "";
 }
 function evidenceView(p, run) {
   const current =
@@ -139,7 +122,7 @@ function evidenceView(p, run) {
   const evidence = current ? run.evidence : null,
     base = evidence?.baseline?.required?.assessment,
     candidate = evidence?.candidate?.required?.assessment;
-  return `<section class="panel"><div class="section-title"><div><span class="eyebrow">${run?.verification_mode === "live-agent-2" ? "LIVE AGENT 2 + MANDATORY SCRIPTED CHECKS" : "SCRIPTED VERIFICATION ONLY"}</span><h2>Evidence, side by side.</h2></div>${run ? badge(current ? run.state : "Stale evidence — approval or revision changed") : badge("Not run")}</div>${run ? `<p class="run-message">${esc(current ? run.message || "Executing the trusted Playwright harness…" : "This evidence is archived and cannot verify the current revision.")}</p><p class="small muted">Run ${esc(run.id)} · ${esc(run.verification_mode || "scripted-verification")}<br>${date(run.started_at)} → ${date(run.finished_at)}</p>` : '<p class="muted">Approval is required before independent candidate verification can start.</p>'}${agent2Assessment(run)}<div class="table-scroll"><table><thead><tr><th>Required check</th><th>Baseline</th><th>Candidate</th></tr></thead><tbody>${p.requirements
+  return `<section class="panel"><div class="section-title"><div><span class="eyebrow">${run?.verification_mode === "live-agent-2" ? "LIVE VERIFICATION" : "AUTOMATED CHECKS"}</span><h3>Verification evidence</h3></div>${run ? badge(current ? run.state : "Stale evidence — approval or revision changed") : badge("Not run")}</div>${run ? `<p class="run-message">${esc(current ? run.message || "Executing the trusted Playwright harness…" : "This evidence is archived and cannot verify the current revision.")}</p><p class="small muted">Run ${esc(run.id)} · ${esc(run.verification_mode || "scripted-verification")}<br>${date(run.started_at)} → ${date(run.finished_at)}</p>` : '<p class="muted">Approval is required before independent candidate verification can start.</p>'}${agent2Assessment(run)}<div class="table-scroll"><table><thead><tr><th>Required check</th><th>Baseline</th><th>Candidate</th></tr></thead><tbody>${p.requirements
     .map((r) => {
       const b = base?.checks.find((x) => x.id === r.id),
         c = candidate?.checks.find((x) => x.id === r.id);
@@ -183,6 +166,7 @@ root.addEventListener("click", async (event) => {
   const action = el.dataset.action,
     artifact = el.dataset.artifact;
   if (!action && !artifact) return;
+  if (busy) return;
   error = "";
   notice = "";
   try {
@@ -203,7 +187,21 @@ root.addEventListener("click", async (event) => {
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       return;
     }
-    if (action === "logout") {
+    if (action === "filter-all" || action === "filter-unread") {
+      inboxReadFilter = action === "filter-unread" ? "unread" : "all";
+      render();
+      return;
+    } else if (action === "show-inbox" || action === "show-ticket") {
+      mobileWorkspacePane = action === "show-inbox" ? "inbox" : "ticket";
+      render();
+      return;
+    } else if (action === "open-review" || action === "open-results") {
+      const panel = root.querySelector(`[data-agent-detail="${action === "open-review" ? "build" : "verify"}"]`);
+      if (panel) { panel.open = true; panel.querySelector("summary").focus({ preventScroll: true }); panel.scrollIntoView({ block: "nearest", behavior: "instant" }); }
+      return;
+    } else if (action === "logout") {
+      workspaceRefreshVersion++;
+      workspaceMemory.clear();
       await api("/logout", {});
       token = "";
       sessionStorage.removeItem("2db-engineer-session");
@@ -214,13 +212,19 @@ root.addEventListener("click", async (event) => {
       ticket = null;
     } else if (action === "refresh") await refresh();
     else if (action === "ticket") {
+      workspaceRefreshVersion++;
+      mobileWorkspacePane = "ticket";
       selected = null;
       ticket = allTickets().find((t) => t.id === el.dataset.id);
+      markTicketRead(ticket?.id);
       const latest = proposals.find((p) => p.ticket_id === ticket?.id);
       if (latest) selected = await api(`/proposals/${latest.id}`);
       await refreshAgent();
     } else if (action === "proposal") {
+      workspaceRefreshVersion++;
+      mobileWorkspacePane = "ticket";
       selected = await api("/proposals/" + el.dataset.id);
+      markTicketRead(selected?.ticket_id);
       ticket = null;
       await refreshAgent();
     } else if (action === "create") {
@@ -269,19 +273,18 @@ root.addEventListener("click", async (event) => {
       await refresh();
     } else if (selected) {
       const id = selected.id;
+      busy = true;
       if (action === "revision")
         selected = await api(`/proposals/${id}/revision`, {
           kind: document.getElementById("fixture").value,
         });
-      else if (action === "approve")
-        selected = await api(`/proposals/${id}/approve`, {
-          revision: selected.candidate_revision,
-          revisionNumber: selected.revision_number,
-        });
-      else if (["changes", "reject"].includes(action))
-        selected = await api(`/proposals/${id}/${action}`, {
-          note: document.getElementById("review-note").value,
-        });
+      else if (action === "approve") {
+        const revision = selected.candidate_revision, revisionNumber = selected.revision_number;
+        if (["Proposal ready", "Changes requested"].includes(selected.state))
+          await api(`/proposals/${id}/submit`, {});
+        selected = await api(`/proposals/${id}/approve`, { revision, revisionNumber });
+      } else if (action === "reject")
+        selected = await api(`/proposals/${id}/reject`, { note: "" });
       else if (action === "verify") {
         await api(`/proposals/${id}/verify`, {});
         notice =
@@ -310,7 +313,7 @@ refresh().catch((e) => {
 setInterval(() => {
   if (
     token &&
-    (["Verification running", "Live Agent 2 running"].includes(selected?.state) ||
+    (proposals.some(p => runningVerification(p)) ||
       investigations.some((r) => !r.finished_at) ||
       scriptedInvestigations.some((r) => !r.finished_at))
   )

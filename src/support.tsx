@@ -28,6 +28,7 @@ export function Support({
     alive = useRef(true),
     submitting = useRef(false);
   const transcript = useRef<Turn[]>([]);
+  const ticketRequestId = useRef(crypto.randomUUID());
   const connected = status === "connected",
     running = connected || status === "connecting";
 
@@ -35,10 +36,13 @@ export function Support({
     path: string,
     options: RequestInit = {},
   ): Promise<T> {
-    const response = await fetch(`/api/support${path}`, {
+    const externalBase = import.meta.env.VITE_TWO_DB_API_BASE_URL?.trim();
+    const isTicketSubmit = path === "" && options.method === "POST";
+    const response = await fetch(isTicketSubmit && externalBase ? `${externalBase.replace(/\/$/, "")}/api/support` : `/api/support${path}`, {
       ...options,
       headers: {
         "X-Demo-Account": accountId,
+        ...(isTicketSubmit ? { "X-Support-Source": mode === "voice" ? "elevenlabs" : "support-form", "Idempotency-Key": ticketRequestId.current } : {}),
         "Content-Type": "application/json",
       },
     });
@@ -358,6 +362,7 @@ export function Support({
               if (!alive.current) return;
               setNotice(`Support ticket saved. Reference: ${result.id}`);
               setDraft(emptyDraft);
+              ticketRequestId.current = crypto.randomUUID();
               setTurns([]);
               transcript.current = [];
               setMode("form");

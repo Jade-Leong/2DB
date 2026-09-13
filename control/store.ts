@@ -35,6 +35,7 @@ export class Store {
    CREATE TABLE IF NOT EXISTS approved_queue(proposal_id TEXT PRIMARY KEY REFERENCES proposals(id), reviewer TEXT NOT NULL, revision TEXT NOT NULL, revision_number INTEGER NOT NULL, created_at TEXT NOT NULL);
    CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,proposal_id TEXT NOT NULL REFERENCES proposals(id), approval_id TEXT NOT NULL, candidate_revision TEXT NOT NULL, base_revision TEXT NOT NULL, requirements_hash TEXT NOT NULL, harness_hash TEXT NOT NULL, revision_number INTEGER NOT NULL, state TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT, evidence TEXT, message TEXT);
    CREATE TABLE IF NOT EXISTS activity(id INTEGER PRIMARY KEY,ticket_id TEXT NOT NULL,proposal_id TEXT,actor TEXT NOT NULL,event TEXT NOT NULL,details TEXT NOT NULL,created_at TEXT NOT NULL);
+   CREATE TABLE IF NOT EXISTS ticket_requests(request_id TEXT PRIMARY KEY,ticket_id TEXT NOT NULL REFERENCES tickets(id));
    CREATE TABLE IF NOT EXISTS github_links(reviewer TEXT PRIMARY KEY, github_user_id INTEGER NOT NULL, github_login TEXT NOT NULL, user_token TEXT NOT NULL, user_token_expires_at TEXT, refresh_token TEXT, created_at TEXT NOT NULL);
    CREATE TABLE IF NOT EXISTS github_prs(proposal_id TEXT PRIMARY KEY REFERENCES proposals(id), pr_url TEXT NOT NULL, pr_number INTEGER NOT NULL, head_branch TEXT NOT NULL, owner TEXT NOT NULL, repo TEXT NOT NULL, created_at TEXT NOT NULL);`);
     this.ensureColumn(
@@ -48,6 +49,7 @@ export class Store {
       "TEXT NOT NULL DEFAULT 'scripted-verification'",
     );
     this.ensureColumn("runs", "agent_assessment", "TEXT");
+    this.ensureColumn("tickets", "source", "TEXT NOT NULL DEFAULT 'marketplace'");
     const interrupted = this.db
       .prepare(
         "SELECT * FROM runs WHERE state IN ('Verification running','Live Agent 2 running')",
@@ -85,31 +87,37 @@ export class Store {
       this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
   }
   inbox(): any[] {
-    if (!existsSync(this.ticketSource)) return [];
-    const source = new DatabaseSync(this.ticketSource, { readOnly: true });
-    try {
-      source.exec("PRAGMA query_only=ON");
-      return source
+    let external: any[] = [];
+    if (existsSync(this.ticketSource)) {
+      const source = new DatabaseSync(this.ticketSource, { readOnly: true });
+      try {
+        source.exec("PRAGMA query_only=ON");
+        external = source
         .prepare(
           "SELECT t.id,t.account_id AS customer_id,a.name AS customer_name,a.role AS customer_role,t.subject,t.message AS complaint,t.created_at AS submitted_at FROM support_tickets t JOIN accounts a ON a.id=t.account_id ORDER BY t.created_at DESC",
         )
-        .all()
-        .map((t) => ({
+        .all();
+      } finally { source.close(); }
+    }
+    return this.mergeControllerTickets(external).map((t) => ({
           ...t,
-          related_reference: null,
+          related_reference: t.related_reference ?? null,
           imported: !!this.db
             .prepare("SELECT id FROM tickets WHERE id=?")
             .get(t.id),
         }));
-    } finally {
-      source.close();
-    }
+  }
+  private mergeControllerTickets(external: any[]) {
+    const local = this.db.prepare("SELECT id,customer_id,customer_name,customer_role,subject,complaint,submitted_at,related_reference,source FROM tickets").all() as any[];
+    const rows = new Map<string, any>(external.map((t) => [t.id, t]));
+    for (const t of local) if (!rows.has(t.id)) rows.set(t.id, t);
+    return [...rows.values()].sort((a, b) => String(b.submitted_at).localeCompare(String(a.submitted_at)));
   }
   async inboxAsync(): Promise<any[]> {
     if (!this.remoteTickets) return this.inbox();
-    return (await this.remoteTickets()).map((t) => ({
+    return this.mergeControllerTickets(await this.remoteTickets()).map((t) => ({
       ...t,
-      related_reference: null,
+      related_reference: t.related_reference ?? null,
       imported: !!this.db
         .prepare("SELECT id FROM tickets WHERE id=?")
         .get(t.id),
@@ -170,7 +178,7 @@ export class Store {
     if (existing) return existing;
     const id = t.id;
     this.db
-      .prepare("INSERT INTO tickets VALUES(?,?,?,?,?,?,?,?,?)")
+      .prepare("INSERT INTO tickets(id,customer_id,customer_name,customer_role,subject,complaint,submitted_at,related_reference,imported_at,source) VALUES(?,?,?,?,?,?,?,?,?,?)")
       .run(
         t.id,
         t.customer_id,
@@ -181,6 +189,7 @@ export class Store {
         t.submitted_at,
         null,
         now(),
+        t.source ?? "marketplace",
       );
     this.event(
       id,

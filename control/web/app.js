@@ -17,6 +17,8 @@ let token = sessionStorage.getItem("2db-engineer-session") || "",
   githubBusy = false,
   proposalPrs = {},
   prCreating = {};
+let inboxPollTimer = null,
+  inboxFingerprint = "";
 const configuredBackend = window.__TWO_DB_API_BASE_URL__ || "";
 const backendBase = configuredBackend || (window.__TWO_DB_HOSTED__ ? null : location.origin);
 const backendUrl = (path) => {
@@ -67,6 +69,7 @@ async function refresh() {
   ]);
   if (version !== workspaceRefreshVersion || token !== session) return;
   [inbox, imported, proposals, testSummary] = result;
+  inboxFingerprint = JSON.stringify(inbox.map((item) => [item.id, item.submitted_at]));
   if (!selected && ticket) {
     const latest = proposals.find((p) => p.ticket_id === ticket.id);
     if (latest) {
@@ -83,7 +86,34 @@ async function refresh() {
   await refreshAgent();
   if (error === "Agent backend is offline. Start the local 2DB runtime to continue.") error = "";
   render();
+  startInboxPolling();
 }
+function startInboxPolling() {
+  if (inboxPollTimer || !token) return;
+  inboxPollTimer = setInterval(async () => {
+    if (!token) return;
+    try {
+      const latest = await api("/inbox");
+      const fingerprint = JSON.stringify(latest.map((item) => [item.id, item.submitted_at]));
+      if (fingerprint !== inboxFingerprint) {
+        inbox = latest;
+        inboxFingerprint = fingerprint;
+        render();
+      }
+      if (/^Agent backend connection is temporarily unavailable/.test(error)) { error = ""; render(); }
+    } catch {
+      if (!/^Agent backend connection is temporarily unavailable/.test(error)) {
+        error = "Agent backend connection is temporarily unavailable. Retrying…";
+        render();
+      }
+    }
+  }, 5000);
+}
+function stopInboxPolling() {
+  if (inboxPollTimer) clearInterval(inboxPollTimer);
+  inboxPollTimer = null;
+}
+window.addEventListener("beforeunload", stopInboxPolling);
 function statusClass(s) {
   return /inconclusive|cancelled|needs information/i.test(s) ? "warning" : /Verified|passed/.test(s)
     ? "good"
@@ -290,6 +320,7 @@ root.addEventListener("click", async (event) => {
       return;
     } else if (action === "logout") {
       workspaceRefreshVersion++;
+      stopInboxPolling();
       workspaceMemory.clear();
       await api("/logout", {});
       token = "";

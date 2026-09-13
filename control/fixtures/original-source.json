@@ -10,7 +10,7 @@
   "public/images/lamp.png": "0ed7aae94bb6cffa5f7db104b9f35422c35120be87bc601b336381610ad9652c",
   "public/images/tote.png": "efe8ad45b9c60f6b3a8496f5736957ee8687a0501881dc1742aa94e950ec90aa",
   "public/images/vase.png": "526c599682f6a739dd85584628aaca996ece59162881e83e862e80e2fa8c66c0",
-  "src/support.tsx": "ac372dba585d62bab57d86a58ad401a977073df875d9751a26e5eaf2891aee82",
+  "src/support.tsx": "cc538def05fe3456384331b0d700f2b27a4426ddbc184540236bd66e84425293",
   "src/voice-client.ts": "c8afaa74874d9de0c12bcb9113c0999e3e31bac9584ef0f3e5fcc641bf023914",
   "server/voice.ts": "2252dc4a76c64e203578e126cb10cb5061095ba5eded00d9c3ad45166b3cc0f1",
   "server/storage.ts": "723094fbbbbc3314fb5f0f8037e02f0b575ea2f07ea30fe8428b985ab12d8d35",

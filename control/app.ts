@@ -28,6 +28,7 @@ import {
   encrypt,
   decrypt,
 } from "./github";
+import { createTicket } from "./tickets";
 
 export function createControl(
   options: {
@@ -80,6 +81,7 @@ export function createControl(
     attempts = new Map<string, { count: number; since: number }>();
   const app = express();
   const accountAuth = options.accountAuth ?? createAccountAuth();
+  app.use(express.json({ limit: "64kb" }));
   function issueSession(identity: AccountIdentity) {
     const sessionToken = randomBytes(32).toString("base64url");
     sessions.set(sessionToken, { expiresAt: Date.now() + identity.expiresIn * 1000, reviewer: identity.reviewer, accessToken: identity.accessToken });
@@ -94,7 +96,7 @@ export function createControl(
     if (origin && allowedOrigins.has(origin)) {
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Vary", "Origin");
-      res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Demo-Account");
+      res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Demo-Account, Idempotency-Key, X-Support-Source");
       res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
     }
     if (req.method === "OPTIONS") {
@@ -122,6 +124,25 @@ export function createControl(
       return;
     }
     next();
+  });
+  app.post("/api/support", (req, res) => {
+    const selected = req.header("X-Support-Source");
+    const source = selected === "elevenlabs" ? "elevenlabs" : selected === "support-form" || !selected ? "support-form" : null;
+    if (!source) { res.status(400).json({ error: "Unsupported ticket source." }); return; }
+    try {
+      const ticket = createTicket(store, { accountId: req.header("X-Demo-Account") || "", subject: req.body?.subject ?? "", complaint: req.body?.message ?? "", source, relatedReference: req.body?.related_reference, requestId: req.header("Idempotency-Key") || undefined });
+      res.status(201).json({ id: ticket!.id, ticket });
+    } catch (error) { const status = Number((error as any)?.status) || 400; res.status(status).json({ error: status >= 500 ? "Ticket could not be saved. Please try again." : (error as Error).message }); }
+  });
+  app.post("/api/support/elevenlabs", (req, res) => {
+    const configured = process.env.ELEVENLABS_SUPPORT_WEBHOOK_SECRET?.trim();
+    const supplied = req.header("X-ElevenLabs-Webhook-Secret") || "";
+    if (!configured || supplied.length !== configured.length || !timingSafeEqual(Buffer.from(supplied), Buffer.from(configured))) { res.status(401).json({ error: "Webhook authentication failed." }); return; }
+    try {
+      const body = req.body ?? {};
+      const ticket = createTicket(store, { accountId: body.account_id || body.customer_id || "", subject: body.subject ?? "", complaint: body.message ?? body.complaint ?? "", source: "elevenlabs", relatedReference: body.related_reference ?? body.order_reference, requestId: req.header("Idempotency-Key") || body.request_id });
+      res.status(201).json({ id: ticket!.id, ticket });
+    } catch (error) { const status = Number((error as any)?.status) || 400; res.status(status).json({ error: status >= 500 ? "Ticket could not be saved. Please try again." : (error as Error).message }); }
   });
   app.get("/health", (_req, res) => res.json({ ok: true, app: "2DB" }));
   app.get("/api/health", (_req, res) => res.json({ ok: true, app: "2DB" }));

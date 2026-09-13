@@ -9,7 +9,7 @@ This update addresses the September 13 investigation that stopped with `rate_lim
 - The full browser record remains in the evidence directory. The model receives bounded page text, five recent response summaries, and the measured checkout/receipt values. Unchanged page text and controls are omitted on subsequent turns.
 - The controller retries only explicit OpenAI `rate_limit_exceeded` errors, at most twice, with delayed exponential backoff, jitter, and `Retry-After`. Waits are capped at 90 seconds total; a server delay above 60 seconds is deferred rather than retried early. Quota exhaustion and authorization failures are not retried.
 - Each attempted model response is buffered until it completes. Failed partial responses never reach the SDK, and browser actions are never replayed by the retry loop.
-- Request attempts have a 45-second deadline. Worker/controller turn deadlines accommodate the bounded retries; the investigation still has its 12-minute overall limit. Cancellation aborts HTTP requests and retry waits.
+- The broker has one 210-second budget covering fetching, reading the complete response stream, and bounded retries. This replaces the overly short 45-second cutoff that could interrupt a healthy response. SDK/controller turn deadlines are 240/250 seconds; the investigation still has its 12-minute overall limit. Cancellation aborts HTTP requests and retry waits. Broker deadline expiry is recorded explicitly as `model_request_timeout`, not a generic network failure.
 - Logs distinguish engineer cancellation from duration expiry, retain fixed worker failure categories, and include an allowlist of numeric rate-limit headers when available. Provider error bodies and credentials are not logged.
 
 ## Deployment handoff
@@ -30,7 +30,7 @@ npm run control:agent:test
 
 The focused tests use synthetic OpenAI streams and a real local Chromium page. They check unique targeting, stable references, compact observations, discarded partial responses, Retry-After, bounded attempts, non-retriable quota, and cancellation. No model, prompt, or credential was changed to increase account limits.
 
-Verification at handoff: TypeScript passed; all nine focused checks passed; the eleven non-UI Agent 1 checks passed. The existing dashboard test still expects the removed “Investigate with Agent 1”/Tavily setup controls and times out against the redesigned interface, including on the committed UI baseline. That older UI test needs alignment with the separate workspace redesign. No successful production model run is claimed for this update before the hosted worker is rebuilt and tested.
+Verification at handoff: TypeScript passed; all eleven focused checks passed, including stalled-stream deadline handling and cancellation; the eleven non-UI Agent 1 checks passed for the preceding reliability update. The existing dashboard test still expects the removed “Investigate with Agent 1”/Tavily setup controls and times out against the redesigned interface, including on the committed UI baseline. That older UI test needs alignment with the separate workspace redesign. No successful production model run is claimed for this update before the hosted worker is rebuilt and tested.
 
 Reference: https://developers.openai.com/api/docs/guides/rate-limits
 

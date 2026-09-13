@@ -1,10 +1,65 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import {
   forwardModelResponse,
   ModelRequestError,
   requestModelWithRetry,
+  withModelRequestDeadline,
 } from "../agent/model-transport";
+
+test("broker deadline covers a stalled response body and discards its partial output", async () => {
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    response.write('data: {"type":"response.created"}\n\n');
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address() as { port: number };
+  const messages: unknown[] = [];
+  try {
+    await assert.rejects(
+      withModelRequestDeadline(
+        (signal) =>
+          requestModelWithRetry(
+            () => fetch(`http://127.0.0.1:${address.port}`, { signal }),
+            "deadline",
+            (message) => messages.push(message),
+            signal,
+            () => assert.fail("Timeout must not replay a model request"),
+          ),
+        new AbortController().signal,
+        100,
+      ),
+      (error: any) =>
+        error instanceof ModelRequestError &&
+        error.code === "model_request_timeout",
+    );
+    assert.deepEqual(messages, []);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test("broker deadline preserves cancellation and unrelated network failures", async () => {
+  const controller = new AbortController();
+  const cancellation = new Error("engineer cancellation");
+  controller.abort(cancellation);
+  await assert.rejects(
+    withModelRequestDeadline(
+      async () => assert.fail("Must not send"),
+      controller.signal,
+    ),
+    (error) => error === cancellation,
+  );
+  const networkError = new TypeError("fetch failed");
+  await assert.rejects(
+    withModelRequestDeadline(async () => {
+      throw networkError;
+    }, new AbortController().signal),
+    (error) => error === networkError,
+  );
+});
 
 function stream(events: unknown[], separator = "\n") {
   const bytes = Buffer.from(

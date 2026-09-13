@@ -35,12 +35,35 @@ export class ModelRequestError extends Error {
               ? "OpenAI API authentication or permission failed. Check the controller's configured credential."
               : code === "model_not_found"
                 ? "The configured OpenAI model is unavailable to this API project. Check model access."
-                : code === "stream_incomplete"
-                  ? "The OpenAI response stream ended without a completed response. No model action was accepted. Retry the investigation."
-                  : code === "response_incomplete"
-                    ? "OpenAI returned an incomplete response. No model action was accepted."
-                    : "OpenAI could not complete the model request. Review the recorded error code and model configuration.";
+                : code === "model_request_timeout"
+                  ? "The model response exceeded the broker's 210-second request budget, including any rate-limit waits. No model action was accepted. This timeout does not establish a billing or rate-limit problem."
+                  : code === "stream_incomplete"
+                    ? "The OpenAI response stream ended without a completed response. No model action was accepted. Retry the investigation."
+                    : code === "response_incomplete"
+                      ? "OpenAI returned an incomplete response. No model action was accepted."
+                      : "OpenAI could not complete the model request. Review the recorded error code and model configuration.";
     super(message);
+  }
+}
+
+// One budget includes fetching, reading the full stream, and retry backoff.
+// It must finish before the SDK's 240-second and controller's 250-second timers.
+export async function withModelRequestDeadline<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
+  signal: AbortSignal,
+  timeoutMs = 210_000,
+): Promise<T> {
+  const deadline = AbortSignal.timeout(timeoutMs);
+  const combined = AbortSignal.any([signal, deadline]);
+  try {
+    combined.throwIfAborted();
+    return await operation(combined);
+  } catch (error) {
+    // Preserve engineer cancellation and the overall investigation deadline.
+    if (signal.aborted) throw error;
+    if (deadline.aborted)
+      throw new ModelRequestError("model_request_timeout", 0);
+    throw error;
   }
 }
 

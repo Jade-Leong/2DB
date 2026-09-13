@@ -2,7 +2,11 @@ import { ObservationContext } from "./observations";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { requestModelWithRetry, ModelRequestError } from "./model-transport";
+import {
+  requestModelWithRetry,
+  withModelRequestDeadline,
+  ModelRequestError,
+} from "./model-transport";
 import type { Store } from "../store";
 import { now, projectRoot, problem } from "../paths";
 import { hash, revision, sourceFiles, harnessRevision } from "../snapshots";
@@ -398,28 +402,33 @@ export class AgentService {
           parsed = JSON.parse(body);
         if (parsed.model !== status.model)
           throw new Error("Model selection changed");
-        await requestModelWithRetry(
-          () =>
-            fetch("https://api.openai.com/v1/responses", {
-              method: "POST",
-              headers: {
-                Authorization: "Bearer " + process.env.TWO_DB_OPENAI_API_KEY,
-                "Content-Type": "application/json",
-              },
-              body,
-              signal: AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
-              redirect: "error",
-            }),
-          message.id,
-          (message) => model!.send(message),
-          signal,
-          (attempt, delayMs, rateLimits) =>
-            this.event(
-              id,
-              "Waiting for model capacity",
-              `OpenAI rate limit: retry ${attempt} of 2 in ${Math.ceil(delayMs / 1000)} seconds. Browser actions are not repeated.`,
-              { attempt, delayMs, rateLimits },
+        await withModelRequestDeadline(
+          (requestSignal) =>
+            requestModelWithRetry(
+              () =>
+                fetch("https://api.openai.com/v1/responses", {
+                  method: "POST",
+                  headers: {
+                    Authorization:
+                      "Bearer " + process.env.TWO_DB_OPENAI_API_KEY,
+                    "Content-Type": "application/json",
+                  },
+                  body,
+                  signal: requestSignal,
+                  redirect: "error",
+                }),
+              message.id,
+              (message) => model!.send(message),
+              requestSignal,
+              (attempt, delayMs, rateLimits) =>
+                this.event(
+                  id,
+                  "Waiting for model capacity",
+                  `OpenAI rate limit: retry ${attempt} of 2 in ${Math.ceil(delayMs / 1000)} seconds. Browser actions are not repeated.`,
+                  { attempt, delayMs, rateLimits },
+                ),
             ),
+          signal,
         );
         this.event(
           id,

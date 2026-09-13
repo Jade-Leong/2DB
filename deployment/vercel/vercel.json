@@ -5,8 +5,11 @@
   "outputDirectory": "public",
   "functions": { "api/index.mjs": { "maxDuration": 60 } },
   "rewrites": [
+    { "source": "/login", "destination": "/control/index.html" },
+    { "source": "/signup", "destination": "/control/index.html" },
     { "source": "/api/:path*", "destination": "/api/index" },
     { "source": "/engineer-api/:path*", "destination": "/api/index" },
+    { "source": "/auth-api/:path*", "destination": "/api/index" },
     { "source": "/uploads/:path*", "destination": "/api/index" }
   ]
 }

@@ -10,7 +10,7 @@ The temporary hosted backend uses a Vercel persistent Sandbox and Drive. It sele
 
 Fetched and merged the Supabase implementation through origin/main at `617ed32`. It prepares private schema `two_db` in project `jcynpdtvuqrppkkgegbt` and adds a server-side PostgreSQL persistence adapter for the marketplace and ticket inbox. Automated tests continue to use disposable SQLite.
 
-The other engineer will privately configure the Sensitive Vercel Production variable `SUPABASE_DB_URL` with the Session pooler URI. Never put its password or URI in Git, chat, tickets, or logs. Uploaded files still use the server filesystem and engineer sign-in still uses the controller's demo key; Supabase Storage and Auth are not implemented. The hosted database path still needs end-to-end validation after the connection variable is available.
+The other engineer will privately configure the Sensitive Vercel Production variable `SUPABASE_DB_URL` with the Session pooler URI. Never put its password or URI in Git, chat, tickets, or logs. The account adapter also requires `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in Vercel. Supabase Auth is implemented but not configured or live-tested in this deployment; the local engineer key remains available. Uploaded files still use the server filesystem, so Supabase Storage is not implemented. The hosted paths still need end-to-end validation after the variables are available.
 
 ### Deploy on commit — not enabled yet
 

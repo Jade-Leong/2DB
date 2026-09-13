@@ -6,9 +6,9 @@ const projectRoot=path.resolve(deploymentRoot,'../..');
 const publicRoot=path.join(deploymentRoot,'public');
 cpSync(path.join(projectRoot,'dist'),publicRoot,{recursive:true});
 mkdirSync(path.join(publicRoot,'control'),{recursive:true});
-for(const name of ['index.html','style.css','app.js','agent.js']) {
+for(const name of ['index.html','style.css','terminal.css','app.js','agent.js','account.js','terminal-motion.js']) {
   let source=readFileSync(path.join(projectRoot,'control/web',name),'utf8');
-  if(name==='index.html')source=source.replaceAll('href="/style.css"','href="/control/style.css"').replaceAll('src="/agent.js"','src="/control/agent.js"').replaceAll('src="/app.js"','src="/control/app.js"');
+  if(name==='index.html')source=source.replaceAll('href="/style.css"','href="/control/style.css"').replaceAll('href="/terminal.css"','href="/control/terminal.css"').replaceAll('src="/agent.js"','src="/control/agent.js"').replaceAll('src="/account.js"','src="/control/account.js"').replaceAll('src="/terminal-motion.js"','src="/control/terminal-motion.js"').replaceAll('src="/app.js"','src="/control/app.js"');
   if(name==='app.js')source=source.replaceAll('http://127.0.0.1:5173','/').replaceAll('href="/"','href="/control/"').replaceAll('src="/logo-reference.png"','src="/control/logo-reference.png"').replaceAll('Local environment','Hosted test preview');
   writeFileSync(path.join(publicRoot,'control',name),source);
 }

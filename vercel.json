@@ -10,11 +10,23 @@
   },
   "rewrites": [
     {
+      "source": "/login",
+      "destination": "/control/index.html"
+    },
+    {
+      "source": "/signup",
+      "destination": "/control/index.html"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/deployment/vercel/api/index"
     },
     {
       "source": "/engineer-api/:path*",
+      "destination": "/deployment/vercel/api/index"
+    },
+    {
+      "source": "/auth-api/:path*",
       "destination": "/deployment/vercel/api/index"
     },
     {

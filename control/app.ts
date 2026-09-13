@@ -14,6 +14,7 @@ import { controlRoot, defaultData, problem } from "./paths";
 import type { FixtureKind } from "./snapshots";
 import { AgentService, setupStatus } from "./agent/service";
 import { checkTavily, tavilyStatus } from "./agent/tavily";
+import { createAccountAuth, mountAccountRoutes, type AccountAuth, type AccountIdentity } from "./accounts";
 
 export function createControl(
   options: {
@@ -23,6 +24,7 @@ export function createControl(
     remoteTickets?: () => Promise<any[]>;
     agentStatus?: typeof setupStatus;
     researchCheck?: typeof checkTavily;
+    accountAuth?: AccountAuth;
   } = {},
 ) {
   const store = new Store(options.dataDir ?? defaultData, options.ticketSource),
@@ -45,9 +47,15 @@ export function createControl(
       { mode: 0o600 },
     );
   const key = JSON.parse(readFileSync(keyFile, "utf8")).key as string,
-    sessions = new Map<string, number>(),
+    sessions = new Map<string, { expiresAt: number; reviewer: string; accessToken?: string }>(),
     attempts = new Map<string, { count: number; since: number }>();
   const app = express();
+  const accountAuth = options.accountAuth ?? createAccountAuth();
+  function issueSession(identity: AccountIdentity) {
+    const sessionToken = randomBytes(32).toString("base64url");
+    sessions.set(sessionToken, { expiresAt: Date.now() + identity.expiresIn * 1000, reviewer: identity.reviewer, accessToken: identity.accessToken });
+    return sessionToken;
+  }
   app.disable("x-powered-by");
   app.use(express.json({ limit: "16kb" }));
   app.use((req, res, next) => {
@@ -71,6 +79,7 @@ export function createControl(
     next();
   });
   app.get("/health", (_req, res) => res.json({ ok: true, app: "2DB" }));
+  mountAccountRoutes(app, accountAuth, issueSession);
   app.post("/engineer-api/login", (req, res) => {
     const address = req.socket.remoteAddress ?? "local",
       previous = attempts.get(address);
@@ -93,24 +102,28 @@ export function createControl(
     }
     attempts.delete(address);
     const token = randomBytes(32).toString("base64url");
-    sessions.set(token, Date.now() + 8 * 60 * 60 * 1000);
+    sessions.set(token, { expiresAt: Date.now() + 8 * 60 * 60 * 1000, reviewer: "Local engineer" });
     res.json({ token, reviewer: "Local engineer", expiresInHours: 8 });
   });
-  app.use("/engineer-api", (req, _res, next) => {
+  app.use("/engineer-api", (req, res, next) => {
     const token = req.header("Authorization")?.replace(/^Bearer /, "");
-    if (!token || !sessions.has(token) || sessions.get(token)! < Date.now())
+    if (!token || !sessions.has(token) || sessions.get(token)!.expiresAt < Date.now())
       problem(
-        "Open a local engineer session. Marketplace account headers do not authorize review.",
+        "Log in to 2db again, or use local engineer access. Marketplace accounts cannot authorize review.",
         401,
       );
+    res.locals.reviewer = sessions.get(token!)!.reviewer;
     next();
   });
-  app.post("/engineer-api/logout", (req, res) => {
-    sessions.delete(req.header("Authorization")!.slice(7));
+  app.post("/engineer-api/logout", async (req, res) => {
+    const id = req.header("Authorization")!.slice(7);
+    const upstream = sessions.get(id)?.accessToken;
+    sessions.delete(id);
+    if (upstream) await accountAuth.logout(upstream).catch(() => {});
     res.json({ ok: true });
   });
   app.get("/engineer-api/session", (_req, res) =>
-    res.json({ reviewer: "Local engineer", active: runner.active }),
+    res.json({ reviewer: res.locals.reviewer, active: runner.active }),
   );
   app.get("/engineer-api/inbox", async (_req, res) => res.json(await store.inboxAsync()));
   app.get("/engineer-api/research/status", (_req, res) =>
@@ -174,7 +187,7 @@ export function createControl(
     res.json(store.change(String(req.params.id), req.body.kind)),
   );
   app.post("/engineer-api/proposals/:id/submit", (req, res) =>
-    res.json(store.submit(String(req.params.id))),
+    res.json(store.submit(String(req.params.id), res.locals.reviewer)),
   );
   app.post("/engineer-api/proposals/:id/approve", (req, res) =>
     res.json(
@@ -182,6 +195,7 @@ export function createControl(
         String(req.params.id),
         req.body.revision,
         req.body.revisionNumber,
+        res.locals.reviewer,
       ),
     ),
   );
@@ -191,6 +205,7 @@ export function createControl(
         String(req.params.id),
         "changes",
         String(req.body.note ?? "").slice(0, 2000),
+        res.locals.reviewer,
       ),
     ),
   );
@@ -200,6 +215,7 @@ export function createControl(
         String(req.params.id),
         "reject",
         String(req.body.note ?? "").slice(0, 2000),
+        res.locals.reviewer,
       ),
     ),
   );
@@ -273,6 +289,7 @@ export function createControl(
       evidence: row.evidence ? JSON.parse(row.evidence) : null,
     });
   });
+  app.get(["/login", "/signup"], (_req, res) => res.sendFile(path.join(controlRoot, "web/index.html")));
   app.use(express.static(path.join(controlRoot, "web")));
   app.use((_req, res) => res.status(404).json({ error: "Not found." }));
   app.use(

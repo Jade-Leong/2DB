@@ -9,12 +9,13 @@ let controller,market,boot;
 const cleanEnv={PATH:process.env.PATH,HOME:process.env.HOME,NODE_EXTRA_CA_CERTS:process.env.NODE_EXTRA_CA_CERTS};
 async function start(config) {
   const databaseEnv=config.supabaseDbUrl?{MARKET_DATABASE:'supabase',SUPABASE_DB_URL:config.supabaseDbUrl}:{};
+  const accountEnv=config.supabaseUrl&&config.supabasePublishableKey?{SUPABASE_URL:config.supabaseUrl,SUPABASE_PUBLISHABLE_KEY:config.supabasePublishableKey}:{};
   if (!market || market.exitCode!==null) market=spawn(process.execPath,['--import','./cloud/market-port.mjs','--import','tsx','server/index.ts'],{cwd:root,env:{...cleanEnv,...databaseEnv},stdio:'ignore'});
   if (!controller || controller.exitCode!==null) {
     mkdirSync(root+'/control/private',{recursive:true});
     const file=root+'/control/private/engineer-key.json';
     if(!existsSync(file))writeFileSync(file,JSON.stringify({key:config.engineerKey}),{mode:0o600});
-    controller=spawn(process.execPath,['--import','tsx','control/index.ts'],{cwd:root,env:{...cleanEnv,...databaseEnv,TWO_DB_OPENAI_API_KEY:config.apiKey,TWO_DB_AGENT_MODEL:config.model},stdio:'ignore'});
+    controller=spawn(process.execPath,['--import','tsx','control/index.ts'],{cwd:root,env:{...cleanEnv,...databaseEnv,...accountEnv,TWO_DB_OPENAI_API_KEY:config.apiKey,TWO_DB_AGENT_MODEL:config.model},stdio:'ignore'});
   }
   for(let i=0;i<100;i++) {
     const ready=await Promise.all([3003,3002].map(p=>fetch(`http://127.0.0.1:${p}/${p===3003?'api/health':'health'}`).then(r=>r.ok).catch(()=>false)));
@@ -29,14 +30,14 @@ const server=http.createServer(async(req,res)=>{
     try {
       let body='';for await(const chunk of req){body+=chunk;if(body.length>12000)throw Error('Too large');}
       const config=JSON.parse(body);
-      if(typeof config.engineerKey!=='string'||config.engineerKey.length<40||typeof config.apiKey!=='string'||typeof config.model!=='string'||typeof config.supabaseDbUrl!=='string')throw Error('Configuration missing');
+      if(typeof config.engineerKey!=='string'||config.engineerKey.length<40||typeof config.apiKey!=='string'||typeof config.model!=='string'||typeof config.supabaseDbUrl!=='string'||typeof config.supabaseUrl!=='string'||typeof config.supabasePublishableKey!=='string')throw Error('Configuration missing');
       if(!boot)boot=start(config).finally(()=>{boot=undefined;});
       await boot;res.writeHead(200,{'content-type':'application/json'}).end('{"ok":true}');
     }catch {res.writeHead(503).end('Backend setup incomplete');}return;
   }
   const url=new URL(req.url,'http://internal');
   if(url.pathname.startsWith('/__')){res.writeHead(404).end();return;}
-  const isControl=url.pathname==='/control'||url.pathname.startsWith('/control/')||url.pathname.startsWith('/engineer-api/');
+  const isControl=url.pathname==='/control'||url.pathname.startsWith('/control/')||url.pathname.startsWith('/engineer-api/')||url.pathname.startsWith('/auth-api/');
   const port=isControl?3002:3003;
   const route=url.pathname.startsWith('/control')?(url.pathname.slice(8)||'/'):url.pathname;
   const headers={...req.headers,host:`127.0.0.1:${port}`};

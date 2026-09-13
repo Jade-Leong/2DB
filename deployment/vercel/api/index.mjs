@@ -14,11 +14,15 @@ async function backend() {
   catch { throw new HostedBackendError('sandbox-get'); }
   try { await ensureDocker(sandbox); }
   catch { throw new HostedBackendError('docker-ready'); }
+  const allowedHosts=['api.openai.com','jcynpdtvuqrppkkgegbt.supabase.co'];
+  if(process.env.SUPABASE_DB_URL){try{allowedHosts.push(new URL(process.env.SUPABASE_DB_URL).hostname);}catch{throw new HostedBackendError('supabase-config');}}
+  try { await sandbox.updateNetworkPolicy({allow:[...new Set(allowedHosts)]}); }
+  catch { throw new HostedBackendError('network-policy'); }
   try { await sandbox.runCommand({cmd:'node',args:['/home/vercel-sandbox/twodb/cloud/gateway.mjs'],detached:true}); }
   catch { throw new HostedBackendError('gateway-start'); }
   const origin=sandbox.domain(8080);
   let response;
-  try { response=await fetch(origin+'/__bootstrap',{method:'POST',headers:{'content-type':'application/json','x-twodb-gateway':process.env.TWO_DB_CLOUD_GATEWAY_KEY},body:JSON.stringify({apiKey:process.env.TWO_DB_OPENAI_API_KEY||'',model:process.env.TWO_DB_AGENT_MODEL||'',engineerKey:process.env.TWO_DB_CLOUD_ENGINEER_KEY,supabaseDbUrl:process.env.SUPABASE_DB_URL||''}),signal:AbortSignal.timeout(120000)}); }
+  try { response=await fetch(origin+'/__bootstrap',{method:'POST',headers:{'content-type':'application/json','x-twodb-gateway':process.env.TWO_DB_CLOUD_GATEWAY_KEY},body:JSON.stringify({apiKey:process.env.TWO_DB_OPENAI_API_KEY||'',model:process.env.TWO_DB_AGENT_MODEL||'',engineerKey:process.env.TWO_DB_CLOUD_ENGINEER_KEY,supabaseDbUrl:process.env.SUPABASE_DB_URL||'',supabaseUrl:process.env.SUPABASE_URL||'',supabasePublishableKey:process.env.SUPABASE_PUBLISHABLE_KEY||''}),signal:AbortSignal.timeout(120000)}); }
   catch { throw new HostedBackendError('bootstrap-fetch'); }
   if(!response.ok)throw new HostedBackendError('bootstrap-response');
   cached={origin,at:Date.now()};

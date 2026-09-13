@@ -2,7 +2,78 @@
 
 A fictional local shopping marketplace for **2DB — Two agents. One reproducible bug.**
 
-The customer website preserves three intentional application defects for investigation. All purchases and funds are simulated; no real payment information is requested. The separate 2DB controller under `control/` now includes live Agent 1, an explicitly labeled scripted Agent 1 demonstration, live Agent 2, and scripted verification. GitHub PR integration, merging, and deployment remain unimplemented.
+The customer website preserves three intentional application defects for investigation. All purchases and funds are simulated; no real payment information is requested. The separate 2DB controller under `control/` now includes live Agent 1, an explicitly labeled scripted Agent 1 demonstration, live Agent 2, scripted verification, and the **2DB Bridge** GitHub App for turning approved proposals into pull requests. Merging and deployment remain human-controlled.
+
+## From customer ticket to GitHub pull request
+
+The production workflow keeps investigation, verification, approval, and repository writes separate:
+
+1. **Agent 1 reproduces and proposes.** It exercises the original customer flow in an isolated browser, records the checkout/payment mismatch, inspects relevant source, optionally uses Tavily Search and Extract for supporting documentation, and produces a bounded source diff.
+2. **Agent 2 starts automatically.** It runs the frozen baseline and candidate through the trusted Playwright requirements and recorded-payment checks. It can use its restricted browser when the evidence is missing, conflicting, or surprising. Agent 2 reports findings; it cannot approve, push, merge, or deploy.
+3. **A human approves the exact revision.** The dashboard binds approval to the proposal revision and moves the ticket into **Approved**. Changing the source, requirements, harness, or revision invalidates earlier evidence.
+4. **A human opens the GitHub tab and selects Create PR.** 2DB Bridge checks that the signed-in GitHub user has push access and that the App is installed on the selected repository. It applies the approved unified diff to the selected base branch, creates a new `2db/<proposal>-<timestamp>` branch and commit, and opens a pull request.
+5. **GitHub owns review and merge.** 2DB records the PR URL and will return the existing PR instead of creating a duplicate for the same proposal. It never merges or deploys the PR.
+
+Tavily citations are displayed as supporting evidence beside Agent 1's diagnosis. They provide public technical context; the isolated browser, Playwright results, and recorded payment values remain the proof that the bug was reproduced and the candidate was checked.
+
+### Configure 2DB Bridge
+
+Create a GitHub App named **2DB Bridge** with repository **Contents: Read and write** and **Pull requests: Read and write** permissions. Enable **Request user authorization (OAuth) during installation** and set the App's first **Callback URL** to:
+
+```text
+https://YOUR-2DB-HOST/engineer-api/github/callback
+```
+
+With OAuth requested during installation, GitHub uses the callback URL after authorization and does not use a separate setup URL. See GitHub's [App registration settings](https://docs.github.com/en/apps/maintaining-github-apps/modifying-a-github-app-registration).
+
+Set these values only in the controller's private production environment:
+
+```text
+GITHUB_APP_ID
+GITHUB_APP_SLUG
+GITHUB_APP_CLIENT_ID
+GITHUB_APP_CLIENT_SECRET
+GITHUB_APP_PRIVATE_KEY
+GITHUB_APP_PUBLIC_URL=https://YOUR-2DB-HOST
+GITHUB_TOKEN_KEY
+PROPOSAL_TARGET_REPO=OWNER/REPOSITORY
+```
+
+`GITHUB_TOKEN_KEY` must decode from base64url to exactly 32 random bytes. Generate one without committing it:
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
+```
+
+`GITHUB_APP_PRIVATE_KEY` accepts the PEM with real newlines or escaped `\n` sequences. `PROPOSAL_TARGET_REPO` is optional; setting it locks PR creation to one repository, which is recommended for the hosted demo. Restart the controller after setting or changing these values. The GitHub tab reports whether the integration is configured.
+
+Each engineer connects GitHub from the dashboard and installs 2DB Bridge on the intended repository. User access tokens are encrypted at rest with AES-256-GCM. Before listing or writing a repository, the controller verifies both App installation coverage and the connected user's push permission. OAuth state is single-use, expires after ten minutes, and is tied to the engineer session that started the connection.
+
+### Test the GitHub handoff
+
+Run the local checks first:
+
+```powershell
+npm.cmd ci
+npm.cmd run control:check
+npm.cmd run control:agent:test
+npm.cmd run control:agent2:test
+npm.cmd run control:research:test
+npm.cmd run control:test
+```
+
+The current automated suites validate the proposal state machine, exact-revision authorization, Agent 1 and Agent 2 boundaries, Tavily handling, and isolated browser verification. They do not contact GitHub or create a real pull request.
+
+Use a disposable repository or demo fork for the GitHub integration test:
+
+1. Configure the GitHub App environment above and restart 2DB.
+2. Complete an Agent 1 → Agent 2 run, inspect the findings, and click **Approve**.
+3. Open **GitHub**, click **Connect GitHub**, authorize the user, and install 2DB Bridge only on the disposable repository.
+4. Return to 2DB, refresh installations, select that repository, and click **Create PR** on the approved proposal.
+5. Confirm that GitHub contains one new `2db/` branch, one commit containing only the approved diff, and an open pull request against the selected base branch.
+6. Click **Create PR** again and confirm 2DB returns the recorded PR instead of creating another.
+7. Confirm an unapproved proposal is unavailable, a repository without App installation or user push access is rejected, and **Disconnect** removes the stored GitHub link.
+8. Review and merge the PR in GitHub only after the normal human review. 2DB does not merge or deploy it.
 
 ## Agent 2 and scripted demonstration
 
@@ -12,7 +83,7 @@ The scripted demonstration performs a real Docker browser checkout and records f
 
 ## Milestone 3: Agent 1 investigation
 
-The 2db engineer workspace now uses the Terminal-style design with two agent roles, scroll typing, and email/password login and sign-up. Confirmed accounts share the existing workspace; exact-revision approval is still required for testing. The local engineer key remains available. See [account setup and validation](docs/ACCOUNTS.md).
+The 2db engineer workspace now uses the Terminal-style design with two agent roles, scroll typing, and email/password login and sign-up. Confirmed accounts share the existing workspace; Agent 2 receives an internal exact-revision authorization automatically, and human approval happens after its review. The local engineer key remains available. See [account setup and validation](docs/ACCOUNTS.md).
 
 Agent 1 now has **Tavily Search + Extract** for documentation-backed investigation. The controller retrieves bounded official sources, and the engineer dashboard shows research activity and cited explanations. See [Tavily setup and demonstration](docs/TAVILY.md). Run `npm run control:research:check` to verify the live integration independently of Docker and the model worker.
 
@@ -154,4 +225,4 @@ The server stores integer cents, snapshots item titles/prices at purchase time, 
 
 Do not give future investigator agents this conversation, `operator/`, test reports, or the builder's answer key. Use a fresh, restricted workspace containing only `src/`, `server/`, `public/`, `package.json`, `package-lock.json`, `tsconfig.json`, `vite.config.ts`, `index.html`, `.gitignore`, and `INVESTIGATOR_SETUP.md`. Rename the latter to `README.md` there. Do not copy this operator-oriented README. Give Agent 1 only the selected customer complaint and intended behavior. The independent acceptance suite stays under the operator's control for Agent 2's sandbox verification.
 
-The 2DB human approval boundaries are recorded privately under `operator/WORKFLOW.md`. Milestone 2 implements local engineer approval and scripted verification in `control/`; Agent 1 is implemented behind the milestone-3 setup/isolation gate; live Agent 2 is implemented with mandatory checks and exact-revision approval. The hosted Agent 2 test passed all eight mandatory checks but could not complete its model assessment because the configured OpenAI API account had no credits remaining. GitHub PR integration remains unimplemented.
+The 2DB human approval boundaries are recorded privately under `operator/WORKFLOW.md`. Milestone 2 implements local engineer approval and scripted verification in `control/`; Agent 1 is implemented behind the milestone-3 setup/isolation gate; live Agent 2 is implemented with mandatory checks and exact-revision authorization. After human approval, 2DB Bridge can create a branch and pull request in an installed GitHub repository. GitHub still owns review and merge, and deployment remains outside 2DB.

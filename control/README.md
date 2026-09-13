@@ -4,7 +4,7 @@
 
 The current live Agent 2 and scripted Agent 1 workflows are documented in [AGENT-2.md](AGENT-2.md). It includes persisted mode labels, private `TWO_DB_AGENT_2_MODEL` setup, exact PowerShell windows, Docker setup, dashboard actions, and current limitations.
 
-Milestone 2 adds a separate local control application. Loop Market remains intact, including all three original intentional defects. Milestone 3 adds the separate Agent 1 integration described in [AGENT-1.md](AGENT-1.md). The current milestone adds live Agent 2 and an explicit scripted Agent 1 demonstration. GitHub PR creation, merge, and deployment remain unimplemented. This guide retains the original developer-fixture workflow.
+Milestone 2 adds a separate local control application. Loop Market remains intact, including all three original intentional defects. Milestone 3 adds the separate Agent 1 integration described in [AGENT-1.md](AGENT-1.md). The current workflow adds live Agent 2, an explicit scripted Agent 1 demonstration, and the 2DB Bridge GitHub App. After human approval, the App can create a branch and pull request from the approved diff; GitHub review, merge, and deployment remain human-controlled. See [the GitHub setup and test procedure](../README.md#from-customer-ticket-to-github-pull-request).
 
 ## PowerShell setup and startup
 
@@ -78,7 +78,7 @@ For each sample candidate:
 4. Human approval records the reviewer, timestamp, exact candidate revision, and revision counter in the **Approved** queue for human PR preparation.
 5. Replacing the candidate invalidates prior verification. An on-disk edit to a frozen fixture is detected before execution and refused; unreviewed code is never executed.
 
-Approval does not create, merge, or deploy code. It queues the Agent 2-reviewed proposal for a human engineer to create a pull request.
+Approval does not create, merge, or deploy code. It queues the Agent 2-reviewed proposal in **Approved**. An engineer can then use the separately authorized GitHub tab to create a pull request; approval by itself performs no repository write.
 
 ## Run actual baseline-versus-candidate verification
 

@@ -36,6 +36,7 @@ mkdirSync("/tmp/agent", { recursive: true });
 mkdirSync("/tmp/codex", { recursive: true });
 let thread: Thread | undefined;
 let active = false;
+let failure = "worker_initialization";
 const input = createInterface({ input: process.stdin });
 input.once("close", () => process.exit(0));
 setTimeout(() => process.exit(1), 12 * 60_000).unref();
@@ -59,6 +60,7 @@ input.on("line", async (line) => {
     }
     if (message.type !== "turn" || active) return;
     active = true;
+    failure = "worker_initialization";
     if (!thread) {
       const codex = new Codex({
         apiKey: "local-transport-placeholder",
@@ -70,6 +72,17 @@ input.on("line", async (line) => {
           TMPDIR: "/tmp",
         },
         config: {
+          model_provider: "twodb",
+          model_providers: {
+            twodb: {
+              name: "2DB isolated HTTP broker",
+              base_url: `http://127.0.0.1:${(proxy.address() as any).port}/v1`,
+              wire_api: "responses",
+              supports_websockets: false,
+              request_max_retries: 0,
+              stream_max_retries: 0,
+            },
+          },
           features: {
             shell_tool: false,
             unified_exec: false,
@@ -107,12 +120,25 @@ input.on("line", async (line) => {
       signal: AbortSignal.timeout(120_000),
     });
     let final = "";
+    failure = "sdk_stream";
     for await (const event of events) {
       if (event.type === "thread.started") send(event);
       if (event.type === "turn.completed")
         send({ type: "usage", usage: event.usage });
-      if (event.type === "error" || event.type === "turn.failed")
+      if (event.type === "error" || event.type === "turn.failed") {
+        const detail = JSON.stringify(event);
+        for (const [pattern, category] of [
+          [/403|Forbidden/i, "sdk_forbidden"],
+          [/401|Unauthorized/i, "sdk_unauthorized"],
+          [/429|quota|rate.limit/i, "sdk_quota_or_rate_limit"],
+          [/schema/i, "sdk_schema"],
+          [/unsupported|not supported/i, "sdk_unsupported_option"],
+          [/stream|connection|connect/i, "sdk_transport"],
+        ] as const) {
+          if (pattern.test(detail)) { failure = category; break; }
+        }
         throw new Error("SDK turn failed");
+      }
       if (
         event.type === "item.completed" &&
         event.item.type === "agent_message"
@@ -126,13 +152,17 @@ input.on("line", async (line) => {
           "mcp_tool_call",
           "web_search",
         ].includes(event.item.type)
-      )
+      ) {
+        failure = "native_tool_refused";
         throw new Error("Native tool use is not supported by this broker");
+      }
     }
+    failure = final ? "invalid_action_json" : "empty_model_output";
     send({ type: "action", action: JSON.parse(final) });
   } catch {
     send({
       type: "failed",
+      category: failure,
       message:
         "Model worker failed or returned invalid structured output. Check authentication, selected model, and SDK compatibility.",
     });

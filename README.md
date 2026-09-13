@@ -8,6 +8,12 @@ The customer website preserves three intentional application defects for investi
 
 See [the Agent 1 operating guide](control/AGENT-1.md) for Docker Desktop setup, private API-key configuration, exact PowerShell commands, ticket investigation, evidence, and human approval. The dashboard remains at http://127.0.0.1:3002. It shows **Setup required** until authentication and the container/browser probe pass. A live model run has not yet been demonstrated; [actual results](operator/MILESTONE-3-RESULTS.md) distinguish deterministic tests from live execution. Original marketplace source and saved data are preserved.
 
+## Customer support: form or voice
+
+The Support page first offers **Fill out a form** or **Talk it through**. The form saves the same local tickets as before. The conversational flow uses ElevenLabs, shows a transcript, and prepares an editable complaint for the customer to submit. Voice remains unavailable until credentials and an agent are configured; it never silently simulates a live call.
+
+See [ElevenLabs setup](docs/ELEVENLABS.md) for `.env` configuration, the agent prompt and client tool, testing, data flow, and deployment considerations. No live ElevenLabs call has been tested yet. Voice conversations require internet access and may incur ElevenLabs usage charges.
+
 ## Milestone 2: 2DB engineer review
 
 The companion dashboard runs separately at **http://127.0.0.1:3002** with `npm.cmd run control`. Open a separate PowerShell window and run `npm.cmd run control:engineer` to obtain the local engineer-session key. It imports actual support tickets read-only, displays developer-authored local change proposals, requires exact-revision approval, and runs trusted baseline-versus-candidate Playwright verification. Stop Loop Market with Ctrl+C before verification uses port 3001; leave 2DB running. The controller never resets or patches the original marketplace.

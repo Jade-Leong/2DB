@@ -1,7 +1,7 @@
 import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { IsolatedApp, docker, mustDocker, hardening } from "./docker";
+import { IsolatedApp, docker, hardening } from "./docker";
 import { cleanCopy } from "./policy";
 import { revision } from "../snapshots";
 import { now, projectRoot } from "../paths";
@@ -108,6 +108,8 @@ export async function isolatedEnvironment(
               `type=bind,src=${trusted},dst=/trusted,readonly`,
               "--mount",
               `type=volume,src=${app.data},dst=/app/data`,
+              "--mount",
+              `type=bind,src=${dir},dst=/tmp/evidence`,
               "--env",
               "TWO_DB_RUN_ID=" + run.id,
               "--env",
@@ -124,7 +126,6 @@ export async function isolatedEnvironment(
           );
           exitCode = execution.code;
           writeFileSync(path.join(dir, "process.log"), execution.out);
-          await mustDocker(["cp", name + ":/tmp/evidence/.", dir]);
           report = JSON.parse(
             readFileSync(path.join(dir, "results.json"), "utf8"),
           );

@@ -1,0 +1,57 @@
+{
+  "name": "Loop Market — Customer Support",
+  "conversation_config": {
+    "agent": {
+      "first_message": "Hi, I’m Loop’s AI support assistant. Tell me what happened, and I’ll help put together a complaint for you to review. What went wrong?",
+      "language": "en",
+      "prompt": {
+        "prompt": "You are the voice support intake assistant for Loop Market, a fictional shopping demo. Your job is to listen and prepare a clear complaint, not investigate source code, diagnose hidden defects, promise refunds, or claim an issue is fixed.\n\nAsk one short question at a time. Find out what the customer tried to do, what they expected, what happened instead, and any relevant product name or order reference. Do not request passwords, API keys, payment-card details, or other sensitive information. The demo uses fictional information and simulated purchases.\n\nUse the customer's words and preserve exact amounts and references. Never invent missing details. When there is enough information, briefly repeat the problem back and ask if you understood correctly. Incorporate corrections, then call prepare_support_ticket with a concise subject and a faithful message, within the stated limits.\n\nAfter the tool accepts the draft, explain that it is ready on screen. Ask the customer to choose End & review complaint, make any edits, and click Submit complaint. The tool creates a draft only. Never claim that a ticket has been saved, sent, or assigned. The customer submits it themselves in the app.",
+        "llm": "gpt-4.1-mini",
+        "tools": [
+          {
+            "type": "client",
+            "name": "prepare_support_ticket",
+            "description": "Prepare a faithful complaint draft for the customer to review on screen. This does not submit, save, or send a ticket.",
+            "expects_response": true,
+            "response_timeout_secs": 20,
+            "parameters": {
+              "type": "object",
+              "required": [
+                "subject",
+                "message"
+              ],
+              "properties": {
+                "subject": {
+                  "type": "string",
+                  "description": "Concise complaint subject, 1 to 150 characters."
+                },
+                "message": {
+                  "type": "string",
+                  "description": "Faithful complaint in the customer’s words, 1 to 5000 characters; preserve exact amounts and references and do not invent details."
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "conversation": {
+      "max_duration_seconds": 600,
+      "client_events": [
+        "audio",
+        "interruption",
+        "user_transcript",
+        "agent_response",
+        "client_tool_call"
+      ]
+    },
+    "tts": {
+      "voice_id": "WyFXw4PzMbRnp8iLMJwY"
+    }
+  },
+  "platform_settings": {
+    "auth": {
+      "enable_auth": true
+    }
+  }
+}

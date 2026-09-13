@@ -341,6 +341,7 @@ export class AgentService {
         )
           throw new Error("Model transport budget exceeded");
         requests.add(message.id);
+        this.event(id, "Model request", "The SDK submitted a request to the protected API broker.");
         const body = Buffer.from(message.body, "base64").toString("utf8"),
           parsed = JSON.parse(body);
         if (parsed.model !== status.model)
@@ -355,10 +356,19 @@ export class AgentService {
           signal,
           redirect: "error",
         });
-        if (!response.ok)
+        if (!response.ok) {
+          let code = "unclassified";
+          try {
+            const body = await response.json() as any;
+            const allowed = ["insufficient_quota", "rate_limit_exceeded", "model_not_found", "invalid_api_key", "unsupported_parameter", "unsupported_value", "invalid_json_schema", "invalid_request_error", "permission_denied"];
+            if (allowed.includes(body.error?.code)) code = body.error.code;
+          } catch {}
+          this.event(id, "Model request failed", "The model API rejected the request. No raw response is logged.", { httpStatus: response.status, code });
           throw new Error(
             "Model API rejected this request; no response body is exposed.",
           );
+        }
+        this.event(id, "Model response", "The API accepted the request; awaiting a complete SDK action.", { httpStatus: response.status });
         model!.send({
           type: "model-response-start",
           id: message.id,
@@ -393,9 +403,10 @@ export class AgentService {
           model!.onFailure = fail;
           model!.onMessage = (message) => {
             if (message.type === "model-request") {
-              void proxy(message).catch(() =>
-                fail(new Error("Model service request failed")),
-              );
+              void proxy(message).catch(() => {
+                this.event(id, "Model request failed", "Model broker request did not complete. Check any preceding HTTP status; otherwise this may be a network or transport failure.");
+                fail(new Error("Model service request failed"));
+              });
               return;
             }
             if (message.type === "thread.started")
@@ -409,7 +420,12 @@ export class AgentService {
                 .prepare("UPDATE investigations SET usage=? WHERE id=?")
                 .run(JSON.stringify(run.usage), id);
             }
-            if (message.type === "failed") fail(new Error("SDK worker failed"));
+            if (message.type === "failed") {
+              const allowed = ["worker_initialization", "sdk_stream", "sdk_forbidden", "sdk_unauthorized", "sdk_quota_or_rate_limit", "sdk_schema", "sdk_unsupported_option", "sdk_transport", "native_tool_refused", "invalid_action_json", "empty_model_output"];
+              const category = allowed.includes(message.category) ? message.category : "unclassified";
+              this.event(id, "Worker failed", "The SDK worker did not return an action. No successful model output is inferred.", { category });
+              fail(new Error("SDK worker failed"));
+            }
             if (message.type === "action") {
               clearTimeout(timer);
               resolve(message.action);

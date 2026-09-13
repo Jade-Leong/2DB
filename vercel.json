@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "framework": null,
+  "buildCommand": "npm run vercel-build",
+  "outputDirectory": "deployment/vercel/public",
+  "functions": {
+    "deployment/vercel/api/index.mjs": {
+      "maxDuration": 300
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/deployment/vercel/api/index"
+    },
+    {
+      "source": "/engineer-api/:path*",
+      "destination": "/deployment/vercel/api/index"
+    },
+    {
+      "source": "/uploads/:path*",
+      "destination": "/deployment/vercel/api/index"
+    }
+  ]
+}

@@ -102,15 +102,15 @@ small,
   flex-direction: column;
 }
 .logo {
-  font-weight: 700;
-  font-size: 35px;
-  letter-spacing: -2px;
-  color: white;
   display: flex;
   align-items: center;
+  gap: 9px;
 }
-.logo span {
-  color: #b9c3ff;
+.logo img {
+  display: block;
+  width: 145px;
+  height: auto;
+  border-radius: 6px;
 }
 .logo i {
   font-style: normal;
@@ -120,7 +120,7 @@ small,
   border: 1px solid #464d67;
   border-radius: 4px;
   padding: 4px 6px;
-  margin-left: 13px;
+  margin-left: 0;
 }
 .tagline {
   font-size: 12px;

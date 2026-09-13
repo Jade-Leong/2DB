@@ -6,6 +6,8 @@ The dashboard now has a Codex SDK investigation worker, real browser-action/evid
 
 The original marketplace and its intentional defects are preserved. Developer fixtures remain in a separate demo area. There is no live Agent 2, GitHub PR integration, automatic approval, merge, or deployment.
 
+Setup checkpoint on September 12, 2026: Docker's Linux engine and the non-root/read-only/network-none Chromium probe are now available. End-to-end fixture validation exposed an evidence-persistence problem: results written to container tmpfs were unavailable after exit. The verifier now writes to a dedicated host evidence directory mounted only into the trusted verifier, never into candidate or browser containers. See `operator/SETUP-CHECKPOINT.md` for the actual validation outcome. No live model run is implied by these checks.
+
 ## 1. Prepare the isolated runner
 
 Open **Docker Desktop** from the Windows Start menu and leave it running. Wait for the Linux engine to be running. If Docker asks you to install/update WSL or enable virtualization, complete Docker's instructions first; these are Windows setup tasks, not npm commands. Use Linux containers, not Windows containers. See [Docker's Windows installation guide](https://docs.docker.com/desktop/setup/install/windows-install/).
@@ -50,6 +52,8 @@ npm.cmd run control
 
 The secret is typed into a hidden prompt and stays in this terminal's process environment. It is not written into the project. Close the terminal when done, or after stopping 2DB use `Remove-Item Env:TWO_DB_OPENAI_API_KEY`. Do not run `Get-ChildItem Env:` or print the variable when sharing logs.
 
+Use your own PowerShell window without transcription or screen recording when entering credentials. Variables set by an assistant tool session do not configure a separately opened PowerShell window. Keep using the same window for status and controller startup. There is no separate worker startup command: the controller launches the Docker worker for each investigation.
+
 Status checks SDK installation, acceptance of the API credential/selected model by the models endpoint, Chromium readiness, and the OS isolation probe. An accepted models request does not prove a subsequent Codex generation will succeed; model compatibility, billing, quotas, and network failures are still reported as failures. No success is fabricated.
 
 If 2DB is already running, stop **that controller terminal** with Ctrl+C before restarting it with these variables. The marketplace demo account selector does not authenticate this worker or grant engineer privileges. No key is passed to candidate code, the browser container, the model's prompt, or Docker command-line arguments.
@@ -87,6 +91,8 @@ Copy that **local engineer key** into 2DB's login field. It is a different crede
 7. If the model finishes a changed proposal, click **Review agent-generated proposal**. Review the explanation, uncertainty/verification suggestions, original complaint, actual computed diff, source hashes, thread ID, and evidence. The state is **Awaiting engineer approval**. Starting the investigation did not approve this patch.
 
 If the complaint cannot be reproduced, the run ends as **Not reproduced**, **Needs more information**, **Blocked**, or **Failed**. A model's claim alone is not evidence. There is no automatic fixture fallback. Repeated clicks cannot create simultaneous runs. **Cancel investigation** stops only that run's owned containers. Runs are bounded to 60 actions and 12 minutes; individual browser/model turns also have deadlines. Usage is SDK-reported token counts, without guessed dollar costs or private reasoning.
+
+Startup troubleshooting: a run with no thread ID may indicate worker initialization failure, even if the basic setup probe passed. The runtime must declare ES modules and use the named HTTP-only broker provider (`supports_websockets: false`); the built-in provider may try WebSockets. After a runtime correction, rebuild with `npm.cmd run control:agent:prepare`, refresh dashboard setup status, and start a fresh investigation. Keep the controller's existing PowerShell window open to retain its private environment. Never retry by disabling the sandbox. See `operator/SETUP-CHECKPOINT.md` for the September 12 startup diagnosis and credential-free transport test.
 
 ## 5. Approve and independently test
 

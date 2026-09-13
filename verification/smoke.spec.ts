@@ -241,6 +241,7 @@ test("support complaints are saved against the selected account", async ({
   page,
 }) => {
   await page.goto("/#/support");
+  await page.getByRole("button", { name: /Fill out a form/ }).click();
   await page
     .getByLabel("Subject", { exact: true })
     .fill("Question about my find");

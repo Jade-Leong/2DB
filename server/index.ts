@@ -2,9 +2,14 @@ import express from "express";
 import multer from "multer";
 import sharp from "sharp";
 import { randomUUID } from "node:crypto";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, existsSync } from "node:fs";
+import { loadEnvFile } from "node:process";
+import { voiceRouter } from "./voice.js";
 import path from "node:path";
 import { db, uploadsDir, root } from "./db.js";
+
+if (process.env.LOOP_TEST !== "1" && existsSync(path.join(root, ".env")))
+  loadEnvFile(path.join(root, ".env"));
 
 const app = express();
 app.disable("x-powered-by");
@@ -295,6 +300,7 @@ app.post(
     res.json({ ...p, photo_url: `/uploads/${name}` });
   },
 );
+app.use("/api/support/voice", voiceRouter({ account: identity }));
 app.post("/api/support", (req, res) => {
   const u = identity(req);
   const { subject, message } = req.body;
@@ -335,16 +341,14 @@ app.use(
     const status =
       err instanceof multer.MulterError ? 400 : (err.status ?? 500);
     if (status === 500) console.error(err);
-    res
-      .status(status)
-      .json({
-        error:
-          status === 500
-            ? "Something went wrong. Please try again."
-            : err instanceof multer.MulterError
-              ? "Upload one PNG or JPEG up to 2 MB."
-              : err.message,
-      });
+    res.status(status).json({
+      error:
+        status === 500
+          ? "Something went wrong. Please try again."
+          : err instanceof multer.MulterError
+            ? "Upload one PNG or JPEG up to 2 MB."
+            : err.message,
+    });
   },
 );
 app.listen(3001, "127.0.0.1", () =>

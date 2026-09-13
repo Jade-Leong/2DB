@@ -1,0 +1,9 @@
+*
+!api
+!api/**
+!public
+!public/**
+!runtime.mjs
+!package.json
+!package-lock.json
+!vercel.json

@@ -8,7 +8,14 @@ let token = sessionStorage.getItem("2db-engineer-session") || "",
   error = "",
   notice = "",
   busy = false,
-  testSummary = null;
+  testSummary = null,
+  view = "workspace",
+  githubStatus = null,
+  githubInstallations = [],
+  githubRepos = {},
+  githubSelectedInstall = null,
+  githubBusy = false,
+  proposalPrs = {};
 const esc = (value) =>
   String(value ?? "").replace(
     /[&<>"']/g,
@@ -90,17 +97,60 @@ function render() {
   const p = selected,
     t = p?.ticket || ticket;
   const accountPage = !token && ["/login", "/signup"].includes(location.pathname);
-  root.innerHTML = `<div class="shell ${token ? "signed-in" : ""}"><div class="terminal-titlebar"><span class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></span><span>2db — engineer workspace</span><span class="titlebar-spacer"></span></div><div class="workspace"><header><a class="logo" href="/">2db</a><nav aria-label="Main navigation">${!token ? `<a href="${accountPage ? "/#agents" : "#agents"}">The agents</a>` : ""}<a href="${token ? "#review-workspace" : "/login"}">${token ? "Workspace" : "Sign in"}</a>${!token ? '<a href="/signup">Sign up</a>' : ""}<a href="http://127.0.0.1:3001" target="_blank" rel="noreferrer">Loop Market ↗</a></nav><div class="engineer">${token ? '<span>you</span><button class="text" data-action="logout">Sign out</button>' : '<span class="muted">Local workspace</span>'}</div></header>${token || accountPage ? "" : `<section class="terminal-hero"><span class="breadcrumb">2db / engineer workspace</span><h1 data-type="hero-title">One builds.<br><span>One verifies.</span></h1><p data-type="hero-copy">Two separate agents for your engineering workflow.<br>One proposes the change. One verifies it. You decide what ships.</p><a class="hero-link" href="${token ? "#review-workspace" : "/signup"}">${token ? "Open your workspace" : "Get started"} ↓</a></section>${agentOverview()}`}<main id="review-workspace">${error ? `<div class="alert error" role="alert">${esc(error)}</div>` : ""}${notice ? `<div class="alert" role="status">${esc(notice)}</div>` : ""}
+  const githubNav = token ? `<button class="nav-link" data-action="view-github" aria-pressed="${view === "github"}">GitHub${githubStatus?.connected ? " ✓" : ""}</button>` : "";
+  root.innerHTML = `<div class="shell ${token ? "signed-in" : ""}"><div class="terminal-titlebar"><span class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></span><span>2db — engineer workspace</span><span class="titlebar-spacer"></span></div><div class="workspace"><header><a class="logo" href="/">2db</a><nav aria-label="Main navigation">${!token ? `<a href="${accountPage ? "/#agents" : "#agents"}">The agents</a>` : ""}${token ? `<button class="nav-link" data-action="view-workspace" aria-pressed="${view === "workspace"}">Workspace</button>` : `<a href="/login">Sign in</a>`}${!token ? '<a href="/signup">Sign up</a>' : ""}${githubNav}<a href="http://127.0.0.1:3001" target="_blank" rel="noreferrer">Loop Market ↗</a></nav><div class="engineer">${token ? '<span>you</span><button class="text" data-action="logout">Sign out</button>' : '<span class="muted">Local workspace</span>'}</div></header>${token || accountPage ? "" : `<section class="terminal-hero"><span class="breadcrumb">2db / engineer workspace</span><h1 data-type="hero-title">One builds.<br><span>One verifies.</span></h1><p data-type="hero-copy">Two separate agents for your engineering workflow.<br>One proposes the change. One verifies it. You decide what ships.</p><a class="hero-link" href="${token ? "#review-workspace" : "/signup"}">${token ? "Open your workspace" : "Get started"} ↓</a></section>${agentOverview()}`}<main id="review-workspace">${error ? `<div class="alert error" role="alert">${esc(error)}</div>` : ""}${notice ? `<div class="alert" role="status">${esc(notice)}</div>` : ""}
 ${
   !token
     ? accountView()
-    : workspaceView(t)
+    : view === "github"
+      ? githubView()
+      : workspaceView(t)
 } </main><footer><span>2db / One builds. One verifies.</span><span>Independent agents. Your approval.</span></footer></div></div>`;
   const brand = root.querySelector(".logo");
   brand.setAttribute("aria-label", "2db home");
   brand.innerHTML = '<img src="/brand-mark.svg" width="104" height="40" alt=""><span>2db</span>';
   restoreWorkspace(previousWorkspace, t);
   window.TerminalMotion?.enhance(root);
+}
+function githubView() {
+  if (!githubStatus) return `<section class="panel"><h2>GitHub</h2><p class="muted">Loading GitHub connection status…</p></section>`;
+  if (!githubStatus.configured)
+    return `<section class="panel"><h2>GitHub</h2><p>The GitHub App integration is not configured on this server. Set <code>GITHUB_APP_ID</code>, <code>GITHUB_APP_SLUG</code>, <code>GITHUB_APP_CLIENT_ID</code>, <code>GITHUB_APP_CLIENT_SECRET</code>, <code>GITHUB_APP_PRIVATE_KEY</code>, and <code>GITHUB_TOKEN_KEY</code> in your environment, then restart.</p></section>`;
+  if (!githubStatus.connected)
+    return `<section class="panel"><h2>GitHub</h2><p>Connect a GitHub account so approved proposals can be pushed as pull requests to a repository you have installed the <b>2DB Bridge</b> app on.</p><div class="actions"><button data-action="github-connect" ${githubBusy ? "disabled" : ""}>${githubBusy ? "Preparing…" : "Connect GitHub →"}</button></div></section>`;
+  const installs = githubInstallations.map((i) => `<li><button class="text" data-action="github-select-install" data-id="${i.id}" aria-pressed="${githubSelectedInstall === i.id}">${esc(i.account_login)} · #${i.id}</button></li>`).join("");
+  const repos = (githubSelectedInstall && githubRepos[githubSelectedInstall]) || [];
+  const repoOptions = repos.map((r) => `<option value="${esc(r.owner)}/${esc(r.repo)}" data-base="${esc(r.default_branch)}">${esc(r.owner)}/${esc(r.repo)} (${esc(r.default_branch)})</option>`).join("");
+  const approved = proposals.filter((p) => p.state === "Approved");
+  const approvedList = approved.length
+    ? approved.map((p) => {
+        const pr = proposalPrs[p.id];
+        const rowRepo = repos[0];
+        return `<li class="github-pr-row"><div><strong>${esc(p.ticket_id)}</strong><span class="muted"> · rev ${p.revision_number}</span></div>${pr
+          ? `<a href="${esc(pr.url)}" target="_blank" rel="noreferrer">PR #${pr.number} ↗</a>`
+          : repos.length
+            ? `<div class="actions"><select data-role="pr-repo" data-proposal="${esc(p.id)}">${repoOptions}</select><button data-action="create-pr" data-id="${esc(p.id)}" data-install="${githubSelectedInstall}" data-repo="${esc(rowRepo.owner)}/${esc(rowRepo.repo)}" data-base="${esc(rowRepo.default_branch)}">Create PR</button></div>`
+            : `<span class="muted">Choose an installation with a repository.</span>`}</li>`;
+      }).join("")
+    : `<p class="muted">No approved proposals yet.</p>`;
+  return `<section class="panel"><h2>GitHub</h2><p>Connected as <b>${esc(githubStatus.login)}</b>. Approved proposals can be pushed as pull requests to any repository below.</p><div class="actions"><button class="secondary" data-action="github-disconnect" ${githubBusy ? "disabled" : ""}>Disconnect</button><button class="text" data-action="github-refresh" ${githubBusy ? "disabled" : ""}>Refresh installations</button></div><h3>Installations</h3>${githubInstallations.length ? `<ul class="github-install-list">${installs}</ul>` : `<p class="muted">No installations yet. <button class="text" data-action="github-install-more">Install 2DB Bridge on a repository →</button></p>`}<h3>Push approved proposals</h3><ul class="github-pr-list">${approvedList}</ul></section>`;
+}
+async function refreshGithubStatus() {
+  if (!token) return;
+  try { githubStatus = await api("/github/status"); }
+  catch (e) { githubStatus = { configured: false, connected: false, login: null }; }
+}
+async function refreshGithubInstallations() {
+  if (!githubStatus?.connected) { githubInstallations = []; githubRepos = {}; return; }
+  try {
+    const { installations } = await api("/github/installations");
+    githubInstallations = installations;
+    if (installations.length && !githubSelectedInstall) githubSelectedInstall = installations[0].id;
+    if (githubSelectedInstall && !githubRepos[githubSelectedInstall]) {
+      const { repos } = await api(`/github/installations/${githubSelectedInstall}/repos`);
+      githubRepos[githubSelectedInstall] = repos;
+    }
+  } catch (e) { error = e.message; }
 }
 function ticketView(t) {
   return `<section class="ticket-header"><div class="ticket-kicker"><span>${esc(t.customer_name)}</span><time title="${esc(date(t.submitted_at))}">${relativeDate(t.submitted_at)}</time></div><h2>${esc(t.subject)}</h2><blockquote>${esc(t.complaint)}</blockquote><details><summary>Ticket details</summary><dl class="ticket-metadata"><dt>Ticket reference</dt><dd>${esc(t.id)}</dd><dt>Customer</dt><dd>${esc(t.customer_name)} · ${esc(t.customer_role)}</dd><dt>Customer ID</dt><dd>${esc(t.customer_id)}</dd><dt>Submitted</dt><dd>${date(t.submitted_at)}</dd>${t.related_reference ? `<dt>Related record</dt><dd>${esc(t.related_reference)}</dd>` : ""}</dl></details><div class="actions"><button class="secondary" data-action="delete-ticket" data-id="${esc(t.id)}">Delete ticket</button></div></section>`;
@@ -212,6 +262,85 @@ root.addEventListener("click", async (event) => {
       selected = null;
       ticket = null;
     } else if (action === "refresh") await refresh();
+    else if (action === "view-workspace") { view = "workspace"; render(); return; }
+    else if (action === "view-github") {
+      view = "github"; render();
+      await refreshGithubStatus();
+      if (githubStatus?.connected) await refreshGithubInstallations();
+      render();
+      return;
+    }
+    else if (action === "github-connect" || action === "github-install-more") {
+      githubBusy = true; render();
+      try {
+        const { url } = await api("/github/install-url", {});
+        const popup = window.open(url, "2db-github-install", "width=720,height=820");
+        if (!popup) throw new Error("Popup was blocked. Allow popups and try again.");
+        const wasConnected = !!githubStatus?.connected;
+        const poll = setInterval(async () => {
+          try {
+            const fresh = await api("/github/status");
+            if (fresh.connected && (!wasConnected || fresh.login !== githubStatus?.login || popup.closed)) {
+              clearInterval(poll);
+              githubStatus = fresh;
+              await refreshGithubInstallations();
+              githubBusy = false;
+              notice = `Connected to GitHub as ${fresh.login}.`;
+              render();
+            }
+          } catch {}
+          if (popup.closed) { clearInterval(poll); githubBusy = false; render(); }
+        }, 1500);
+      } catch (e) { error = e.message; githubBusy = false; render(); }
+      return;
+    }
+    else if (action === "github-disconnect") {
+      if (!confirm("Disconnect GitHub? Stored tokens will be removed.")) return;
+      githubBusy = true; render();
+      try {
+        await api("/github/disconnect", {});
+        githubStatus = null; githubInstallations = []; githubRepos = {}; githubSelectedInstall = null;
+        await refreshGithubStatus();
+      } catch (e) { error = e.message; }
+      githubBusy = false; render();
+      return;
+    }
+    else if (action === "github-refresh") {
+      githubBusy = true; render();
+      githubRepos = {};
+      await refreshGithubInstallations();
+      githubBusy = false; render();
+      return;
+    }
+    else if (action === "github-select-install") {
+      githubSelectedInstall = Number(el.dataset.id);
+      if (!githubRepos[githubSelectedInstall]) {
+        githubBusy = true; render();
+        try {
+          const { repos } = await api(`/github/installations/${githubSelectedInstall}/repos`);
+          githubRepos[githubSelectedInstall] = repos;
+        } catch (e) { error = e.message; }
+        githubBusy = false;
+      }
+      render();
+      return;
+    }
+    else if (action === "create-pr") {
+      const select = root.querySelector(`select[data-role="pr-repo"][data-proposal="${el.dataset.id}"]`);
+      const value = select?.value || el.dataset.repo;
+      const base = select?.selectedOptions?.[0]?.dataset?.base || el.dataset.base || "main";
+      const [owner, repo] = String(value || "").split("/");
+      const installationId = Number(el.dataset.install);
+      if (!owner || !repo || !installationId) return;
+      busy = true; render();
+      try {
+        const pr = await api(`/proposals/${el.dataset.id}/pr`, { owner, repo, installationId, base });
+        proposalPrs[el.dataset.id] = pr;
+        notice = `Pull request opened: ${pr.url}`;
+      } catch (e) { error = e.message; }
+      busy = false; render();
+      return;
+    }
     else if (action === "delete-ticket") {
       if (!confirm("Delete this ticket? This removes it from the marketplace database.")) return;
       busy = true;
@@ -329,6 +458,7 @@ refresh().catch((e) => {
   error = e.message;
   render();
 });
+refreshGithubStatus().then(() => render()).catch(() => {});
 setInterval(() => {
   if (
     token &&

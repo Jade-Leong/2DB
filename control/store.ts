@@ -34,7 +34,9 @@ export class Store {
    CREATE TABLE IF NOT EXISTS approvals(id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL REFERENCES proposals(id), reviewer TEXT NOT NULL, revision TEXT NOT NULL, base_revision TEXT NOT NULL, requirements_hash TEXT NOT NULL, harness_hash TEXT NOT NULL, revision_number INTEGER NOT NULL, created_at TEXT NOT NULL, invalidated_at TEXT);
    CREATE TABLE IF NOT EXISTS approved_queue(proposal_id TEXT PRIMARY KEY REFERENCES proposals(id), reviewer TEXT NOT NULL, revision TEXT NOT NULL, revision_number INTEGER NOT NULL, created_at TEXT NOT NULL);
    CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,proposal_id TEXT NOT NULL REFERENCES proposals(id), approval_id TEXT NOT NULL, candidate_revision TEXT NOT NULL, base_revision TEXT NOT NULL, requirements_hash TEXT NOT NULL, harness_hash TEXT NOT NULL, revision_number INTEGER NOT NULL, state TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT, evidence TEXT, message TEXT);
-   CREATE TABLE IF NOT EXISTS activity(id INTEGER PRIMARY KEY,ticket_id TEXT NOT NULL,proposal_id TEXT,actor TEXT NOT NULL,event TEXT NOT NULL,details TEXT NOT NULL,created_at TEXT NOT NULL);`);
+   CREATE TABLE IF NOT EXISTS activity(id INTEGER PRIMARY KEY,ticket_id TEXT NOT NULL,proposal_id TEXT,actor TEXT NOT NULL,event TEXT NOT NULL,details TEXT NOT NULL,created_at TEXT NOT NULL);
+   CREATE TABLE IF NOT EXISTS github_links(reviewer TEXT PRIMARY KEY, github_user_id INTEGER NOT NULL, github_login TEXT NOT NULL, user_token TEXT NOT NULL, user_token_expires_at TEXT, refresh_token TEXT, created_at TEXT NOT NULL);
+   CREATE TABLE IF NOT EXISTS github_prs(proposal_id TEXT PRIMARY KEY REFERENCES proposals(id), pr_url TEXT NOT NULL, pr_number INTEGER NOT NULL, head_branch TEXT NOT NULL, owner TEXT NOT NULL, repo TEXT NOT NULL, created_at TEXT NOT NULL);`);
     this.ensureColumn(
       "proposals",
       "investigation_origin",
@@ -610,6 +612,25 @@ export class Store {
     )
       problem("Agent candidate location does not match its run.", 409);
     return c;
+  }
+  githubLink(reviewer: string): { github_user_id: number; github_login: string; user_token: string; user_token_expires_at: string | null; refresh_token: string | null } | undefined {
+    return this.db.prepare("SELECT github_user_id, github_login, user_token, user_token_expires_at, refresh_token FROM github_links WHERE reviewer=?").get(reviewer) as any;
+  }
+  saveGithubLink(reviewer: string, link: { github_user_id: number; github_login: string; user_token: string; user_token_expires_at?: string | null; refresh_token?: string | null }) {
+    this.db.prepare("INSERT INTO github_links(reviewer,github_user_id,github_login,user_token,user_token_expires_at,refresh_token,created_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(reviewer) DO UPDATE SET github_user_id=excluded.github_user_id, github_login=excluded.github_login, user_token=excluded.user_token, user_token_expires_at=excluded.user_token_expires_at, refresh_token=excluded.refresh_token").run(
+      reviewer, link.github_user_id, link.github_login, link.user_token, link.user_token_expires_at ?? null, link.refresh_token ?? null, now(),
+    );
+  }
+  removeGithubLink(reviewer: string) {
+    this.db.prepare("DELETE FROM github_links WHERE reviewer=?").run(reviewer);
+  }
+  savePr(proposalId: string, pr: { url: string; number: number; branch: string; owner: string; repo: string }) {
+    this.db.prepare("INSERT INTO github_prs(proposal_id,pr_url,pr_number,head_branch,owner,repo,created_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(proposal_id) DO UPDATE SET pr_url=excluded.pr_url, pr_number=excluded.pr_number, head_branch=excluded.head_branch, owner=excluded.owner, repo=excluded.repo").run(
+      proposalId, pr.url, pr.number, pr.branch, pr.owner, pr.repo, now(),
+    );
+  }
+  prForProposal(proposalId: string): { pr_url: string; pr_number: number; head_branch: string; owner: string; repo: string } | undefined {
+    return this.db.prepare("SELECT pr_url, pr_number, head_branch, owner, repo FROM github_prs WHERE proposal_id=?").get(proposalId) as any;
   }
   close() {
     this.db.close();

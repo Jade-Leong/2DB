@@ -17,6 +17,18 @@ import { Agent2Service, agent2Status } from "./agent2";
 import { ScriptedDemoService } from "./scripted-demo";
 import { checkTavily, tavilyStatus } from "./agent/tavily";
 import { createAccountAuth, mountAccountRoutes, type AccountAuth, type AccountIdentity } from "./accounts";
+import {
+  type GitHubConfig,
+  installUrl,
+  safeCompareState,
+  exchangeOAuthCode,
+  fetchGitHubUser,
+  listUserInstallations,
+  listAccessibleRepos,
+  createPullRequestFromDiff,
+  encrypt,
+  decrypt,
+} from "./github";
 
 export function createControl(
   options: {
@@ -25,6 +37,7 @@ export function createControl(
     ticketSource?: string;
     remoteTickets?: () => Promise<any[]>;
     remoteDeleteTicket?: (id: string) => Promise<boolean>;
+    github?: GitHubConfig;
     agentStatus?: typeof setupStatus;
     agent2Status?: typeof agent2Status;
     researchCheck?: typeof checkTavily;
@@ -83,11 +96,14 @@ export function createControl(
       "Content-Security-Policy",
       "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'",
     );
-    if (req.headers.host !== host) {
+    // The GitHub OAuth callback is reached by browser redirect from github.com. It has no
+    // Authorization header — the `state` param (verified below) is the CSRF defense.
+    const githubCallback = req.method === "GET" && req.path === "/engineer-api/github/callback";
+    if (!githubCallback && req.headers.host !== host) {
       res.status(403).json({ error: "Use the loopback dashboard address." });
       return;
     }
-    if (req.headers.origin && req.headers.origin !== `http://${host}`) {
+    if (!githubCallback && req.headers.origin && req.headers.origin !== `http://${host}`) {
       res
         .status(403)
         .json({ error: "Cross-origin controller requests are not allowed." });
@@ -212,6 +228,138 @@ export function createControl(
   app.delete("/engineer-api/tickets/:id", async (req, res) =>
     res.json(await store.deleteTicket(String(req.params.id))),
   );
+
+  function escapeHtml(s: string) {
+    return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+  }
+  // ---- GitHub App integration (2DB Bridge) ----
+  const github = options.github;
+  // In-memory CSRF store: state -> {reviewer, expiresAt}. Cleared after use or 10min.
+  const pendingInstalls = new Map<string, { reviewer: string; expiresAt: number }>();
+  function pruneInstalls() {
+    const now = Date.now();
+    for (const [k, v] of pendingInstalls) if (v.expiresAt < now) pendingInstalls.delete(k);
+  }
+  app.get("/engineer-api/github/status", (_req, res) => {
+    const reviewer = res.locals.reviewer as string;
+    const link = github && store.githubLink(reviewer);
+    res.json({
+      configured: !!github,
+      connected: !!link,
+      login: link?.github_login ?? null,
+    });
+  });
+  app.post("/engineer-api/github/install-url", (_req, res) => {
+    if (!github) problem("GitHub App integration is not configured on this server.", 503);
+    pruneInstalls();
+    const state = randomBytes(24).toString("base64url");
+    pendingInstalls.set(state, {
+      reviewer: res.locals.reviewer as string,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+    });
+    res.json({ url: installUrl(github, state) });
+  });
+  app.get("/engineer-api/github/callback", async (req, res) => {
+    if (!github) { res.status(503).send("GitHub App integration is not configured."); return; }
+    const code = String(req.query.code ?? "");
+    const state = String(req.query.state ?? "");
+    const installationId = Number(req.query.installation_id ?? 0);
+    pruneInstalls();
+    const pending = state && [...pendingInstalls.entries()].find(([k]) => safeCompareState(k, state));
+    if (!pending) { res.status(400).send("Install session expired or invalid. Return to 2DB and try again."); return; }
+    pendingInstalls.delete(pending[0]);
+    if (!code || !Number.isInteger(installationId) || installationId <= 0) {
+      res.status(400).send("GitHub callback is missing code or installation_id.");
+      return;
+    }
+    try {
+      const oauth = await exchangeOAuthCode(github, code);
+      const user = await fetchGitHubUser(oauth.access_token);
+      const expiresAt = oauth.expires_in ? new Date(Date.now() + oauth.expires_in * 1000).toISOString() : null;
+      store.saveGithubLink(pending[1].reviewer, {
+        github_user_id: user.id,
+        github_login: user.login,
+        user_token: encrypt(github, oauth.access_token),
+        user_token_expires_at: expiresAt,
+        refresh_token: oauth.refresh_token ? encrypt(github, oauth.refresh_token) : null,
+      });
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.send(`<!doctype html><meta charset="utf-8"><title>Connected to GitHub</title><style>body{font:14px system-ui;padding:32px;max-width:520px;margin:0 auto}</style><h1 style="font-size:18px">Connected ✓</h1><p>2DB Bridge is connected to <b>${escapeHtml(user.login)}</b>, installation #${installationId}.</p><p>You can close this tab and return to 2DB — the workspace will pick up the connection automatically.</p>`);
+    } catch (e: any) {
+      res.status(502).send(`GitHub callback failed: ${e?.message ?? "unknown error"}`);
+    }
+  });
+  app.post("/engineer-api/github/disconnect", (_req, res) => {
+    store.removeGithubLink(res.locals.reviewer as string);
+    res.json({ ok: true });
+  });
+  app.get("/engineer-api/github/installations", async (_req, res) => {
+    if (!github) problem("GitHub App integration is not configured on this server.", 503);
+    const reviewer = res.locals.reviewer as string;
+    const link = store.githubLink(reviewer);
+    if (!link) problem("Connect a GitHub account first.", 409);
+    const userToken = decrypt(github, link.user_token);
+    const installations = await listUserInstallations(userToken);
+    res.json({ installations });
+  });
+  app.get("/engineer-api/github/installations/:id/repos", async (req, res) => {
+    if (!github) problem("GitHub App integration is not configured on this server.", 503);
+    const reviewer = res.locals.reviewer as string;
+    const link = store.githubLink(reviewer);
+    if (!link) problem("Connect a GitHub account first.", 409);
+    const installationId = Number(req.params.id);
+    if (!Number.isInteger(installationId) || installationId <= 0) problem("Invalid installation.", 400);
+    const userToken = decrypt(github, link.user_token);
+    const installations = await listUserInstallations(userToken);
+    if (!installations.some((i) => i.id === installationId)) problem("You do not have access to this installation.", 403);
+    const repos = await listAccessibleRepos(userToken, installationId);
+    res.json({ repos });
+  });
+  app.post("/engineer-api/proposals/:id/pr", async (req, res) => {
+    if (!github) problem("GitHub App integration is not configured on this server.", 503);
+    const reviewer = res.locals.reviewer as string;
+    const link = store.githubLink(reviewer);
+    if (!link) problem("Connect a GitHub account first.", 409);
+    const proposalId = String(req.params.id);
+    const proposal = store.proposal(proposalId);
+    if (proposal.state !== "Approved") problem("Only approved proposals can be pushed as PRs.", 409);
+    const existing = store.prForProposal(proposalId);
+    if (existing) { res.json({ url: existing.pr_url, number: existing.pr_number, existed: true }); return; }
+    const installationId = Number(req.body.installationId);
+    const owner = String(req.body.owner ?? "").trim();
+    const repo = String(req.body.repo ?? "").trim();
+    const base = String(req.body.base ?? "main").trim() || "main";
+    if (!Number.isInteger(installationId) || installationId <= 0 || !/^[A-Za-z0-9._-]{1,100}$/.test(owner) || !/^[A-Za-z0-9._-]{1,100}$/.test(repo))
+      problem("owner, repo, and installationId are required.", 400);
+    const userToken = decrypt(github, link.user_token);
+    const installations = await listUserInstallations(userToken);
+    if (!installations.some((i) => i.id === installationId)) problem("You do not have access to this installation.", 403);
+    const repos = await listAccessibleRepos(userToken, installationId);
+    if (!repos.some((r) => r.owner === owner && r.repo === repo)) problem("This installation does not cover the chosen repository.", 403);
+    const ticket = store.db.prepare("SELECT subject, complaint FROM tickets WHERE id=?").get(proposal.ticket_id) as { subject: string; complaint: string } | undefined;
+    const title = `[2DB] ${ticket?.subject ?? "Proposed change"}`;
+    const branch = `2db/${proposalId.slice(0, 8)}-${Date.now().toString(36)}`;
+    const body = [
+      `Opened by 2DB Bridge on behalf of ${link.github_login}.`,
+      "",
+      `Ticket: ${ticket?.subject ?? proposal.ticket_id}`,
+      "",
+      "## Proposal explanation",
+      "",
+      proposal.explanation || "(none provided)",
+    ].join("\n");
+    const pr = await createPullRequestFromDiff({
+      config: github, installationId, owner, repo, base, branch, title, body,
+      unifiedDiff: proposal.diff, authorName: link.github_login, authorEmail: `${link.github_login}@users.noreply.github.com`,
+    });
+    store.savePr(proposalId, { url: pr.url, number: pr.number, branch: pr.branch, owner, repo });
+    store.event(proposal.ticket_id, proposalId, `GitHub (${link.github_login})`, "PR opened", { url: pr.url });
+    res.status(201).json({ url: pr.url, number: pr.number, branch: pr.branch });
+  });
+  app.get("/engineer-api/proposals/:id/pr", (req, res) => {
+    const pr = store.prForProposal(String(req.params.id));
+    res.json(pr ? { url: pr.pr_url, number: pr.pr_number, branch: pr.head_branch, owner: pr.owner, repo: pr.repo } : null);
+  });
   app.post("/engineer-api/proposals", async (req, res) => {
     await store.receiveTicket(String(req.body.ticketId));
     return res

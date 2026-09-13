@@ -1,5 +1,6 @@
 import { createControl } from "./app";
 import { readMarketTickets, deleteMarketTicket } from "./market-tickets";
+import { loadGitHubConfig } from "./github";
 const port = Number(process.env.CONTROL_PORT ?? 3002);
 if (!Number.isInteger(port) || port < 1024 || port > 65535)
   throw new Error("CONTROL_PORT must be between 1024 and 65535.");
@@ -9,6 +10,7 @@ if (pool) await pool.query("SELECT id FROM two_db.support_tickets LIMIT 1");
 const control = createControl({
   remoteTickets: pool ? () => readMarketTickets(pool) : undefined,
   remoteDeleteTicket: pool ? (id: string) => deleteMarketTicket(pool, id) : undefined,
+  github: loadGitHubConfig(),
 });
 const server = control.app.listen(port, "127.0.0.1", () =>
   console.log(

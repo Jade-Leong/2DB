@@ -64,8 +64,17 @@ body { padding: 32px; }
 .workspace .logo img { width: 104px; height: 40px; flex: 0 0 auto; border-radius: 0; }
 .workspace .logo span { color: var(--ink); font-size: 22px !important; font-weight: 700; letter-spacing: -1px; }
 header nav { display: flex; gap: 22px; margin-left: auto; flex-wrap: wrap; }
-header nav a { color: var(--muted); }
-header nav a:hover, .hero-link:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 5px; }
+header nav a, header nav .nav-link { color: var(--muted); }
+header nav a:hover, header nav .nav-link:hover, .hero-link:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 5px; }
+header nav .nav-link { background: transparent; border: 0; padding: 0; font: inherit; cursor: pointer; }
+header nav .nav-link[aria-pressed="true"] { color: var(--ink); }
+.github-install-list { list-style: none; padding: 0; margin: 8px 0 20px; display: flex; flex-wrap: wrap; gap: 8px; }
+.github-install-list button { padding: 6px 10px; border: 1px solid #333; border-radius: 3px; background: transparent; color: var(--muted); cursor: pointer; }
+.github-install-list button[aria-pressed="true"] { color: var(--ink); border-color: var(--agent-one); }
+.github-pr-list { list-style: none; padding: 0; margin: 0; }
+.github-pr-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 0; border-bottom: 1px solid #292929; flex-wrap: wrap; }
+.github-pr-row .actions { display: flex; gap: 8px; align-items: center; }
+.github-pr-row select { background: transparent; color: var(--ink); border: 1px solid #333; padding: 4px 6px; }
 .engineer { display: flex; gap: 15px; }
 .terminal-hero { padding: 34px 0 44px; max-width: 760px; }
 .breadcrumb, .eyebrow { color: var(--muted); letter-spacing: 0; font-weight: 400; }

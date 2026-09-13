@@ -4,7 +4,7 @@
 
 The dashboard now has a Codex SDK investigation worker, real browser-action/evidence collection, scoped source editing, agent-generated local proposals, and an isolated verification adapter. A live investigation is **not yet demonstrated on this machine**: Docker Desktop's Linux engine was unavailable and the separate worker API key/model were not configured. The dashboard deliberately shows **Setup required**. Deterministic tests do not count as a live model run.
 
-The original marketplace and its intentional defects are preserved. Developer fixtures remain in a separate demo area. There is no live Agent 2, GitHub PR integration, automatic approval, merge, or deployment.
+The original marketplace and its intentional defects are preserved. Developer fixtures remain in a separate demo area. Agent 2 reviews proposed implementations before human approval. There is no GitHub PR integration, automatic approval, merge, or deployment.
 
 Setup checkpoint on September 12, 2026: Docker's Linux engine and the non-root/read-only/network-none Chromium probe are now available. End-to-end fixture validation exposed an evidence-persistence problem: results written to container tmpfs were unavailable after exit. The verifier now writes to a dedicated host evidence directory mounted only into the trusted verifier, never into candidate or browser containers. See `operator/SETUP-CHECKPOINT.md` for the actual validation outcome. No live model run is implied by these checks.
 
@@ -84,19 +84,21 @@ Copy that **local engineer key** into 2DB's login field. It is a different crede
    > I used LOOP20, and checkout showed $38.40, but the simulated payment was $48.00.
 
 2. In 2DB, choose **Refresh**, then open that real ticket. The original complaint and synthetic identity are copied through the existing read-only adapter. No hidden diagnosis is attached.
-3. In **Agent 1 · Live investigation**, check that all setup indicators are ready. Click **Investigate with Agent 1**. Only an authenticated engineer can start a run.
+3. In **Agent 1 · Build**, check that all setup indicators are ready. Click **Start Agent 1**. Only an authenticated engineer can start a run.
 4. Watch **Actual investigation actions**. The model chooses navigation, clicks, inputs, response inspection, and source edits through a bounded structured action protocol. This is not a replay of the independent acceptance suite or developer fixture.
 5. Open the timestamped screenshots and recorded HTTP values under **Trusted browser evidence**. The backend only accepts reproduction when the preserved baseline yields a successful checkout and buyer receipt with a displayed/order total that differs from the payment, with a real screenshot and matching source/evidence hashes.
 6. After reproduction, Agent 1 can read allowed application files and replace existing TypeScript/CSS source inside `src/` or `server/`. Wider changes must be escalated. No candidate build or execution occurs here.
-7. If the model finishes a changed proposal, click **Review agent-generated proposal**. Review the explanation, uncertainty/verification suggestions, original complaint, actual computed diff, source hashes, thread ID, and evidence. The state is **Awaiting engineer approval**. Starting the investigation did not approve this patch.
+7. If the model finishes a changed proposal, click **Review agent-generated proposal**. Review the explanation, uncertainty/verification suggestions, original complaint, actual computed diff, source hashes, thread ID, and evidence. The state is **Ready for Agent 2**. Starting the investigation did not approve this patch.
 
 If the complaint cannot be reproduced, the run ends as **Not reproduced**, **Needs more information**, **Blocked**, or **Failed**. A model's claim alone is not evidence. There is no automatic fixture fallback. Repeated clicks cannot create simultaneous runs. **Cancel investigation** stops only that run's owned containers. Runs are bounded to 60 actions and 12 minutes; individual browser/model turns also have deadlines. Usage is SDK-reported token counts, without guessed dollar costs or private reasoning.
 
 Startup troubleshooting: a run with no thread ID may indicate worker initialization failure, even if the basic setup probe passed. The runtime must declare ES modules and use the named HTTP-only broker provider (`supports_websockets: false`); the built-in provider may try WebSockets. After a runtime correction, rebuild with `npm.cmd run control:agent:prepare`, refresh dashboard setup status, and start a fresh investigation. Keep the controller's existing PowerShell window open to retain its private environment. Never retry by disabling the sandbox. See `operator/SETUP-CHECKPOINT.md` for the September 12 startup diagnosis and credential-free transport test.
 
-## 5. Approve and independently test
+## 5. Independently test, then approve for human PR work
 
-When you are satisfied with the actual candidate diff, select **Approve this revision for testing**. Approval binds the exact source, requirements, and harness identities. A changed candidate invalidates approval. Agent proposals cannot be swapped for the developer fixture. Request changes and start a fresh investigation for a new revision.
+When Agent 1 has proposed a candidate, select **Start Agent 2**. The controller binds the exact source, requirements, and harness identities before executing the isolated candidate. A changed candidate invalidates that verification authorization. Agent proposals cannot be swapped for the developer fixture. Request changes and start a fresh investigation for a new revision.
+
+After Agent 2 finishes, review its checks and flagged concerns. Human **Approve** is available for the exact revision reviewed by live Agent 2, including a failed or inconclusive review; the human retains the final judgment. Approval moves the ticket to the **Approved** queue for a human engineer to create a pull request; it does not create, merge, or deploy one.
 
 **Stop the manual Loop Market terminal with Ctrl+C before independent verification. Leave Docker Desktop and 2DB running.** The existing port-3001 occupancy check is preserved. An occupied port shows:
 

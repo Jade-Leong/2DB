@@ -31,13 +31,24 @@ export class Store {
    CREATE TABLE IF NOT EXISTS tickets(id TEXT PRIMARY KEY, customer_id TEXT NOT NULL, customer_name TEXT NOT NULL, customer_role TEXT NOT NULL, subject TEXT NOT NULL, complaint TEXT NOT NULL, submitted_at TEXT NOT NULL, related_reference TEXT, imported_at TEXT NOT NULL);
    CREATE TABLE IF NOT EXISTS proposals(id TEXT PRIMARY KEY, ticket_id TEXT NOT NULL REFERENCES tickets(id), kind TEXT NOT NULL, base_revision TEXT NOT NULL, candidate_revision TEXT NOT NULL, requirements TEXT NOT NULL, requirements_hash TEXT NOT NULL, harness_hash TEXT NOT NULL, diff TEXT NOT NULL, explanation TEXT NOT NULL, state TEXT NOT NULL, revision_number INTEGER NOT NULL, current_approval TEXT, last_run TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
    CREATE TABLE IF NOT EXISTS approvals(id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL REFERENCES proposals(id), reviewer TEXT NOT NULL, revision TEXT NOT NULL, base_revision TEXT NOT NULL, requirements_hash TEXT NOT NULL, harness_hash TEXT NOT NULL, revision_number INTEGER NOT NULL, created_at TEXT NOT NULL, invalidated_at TEXT);
+   CREATE TABLE IF NOT EXISTS approved_queue(proposal_id TEXT PRIMARY KEY REFERENCES proposals(id), reviewer TEXT NOT NULL, revision TEXT NOT NULL, revision_number INTEGER NOT NULL, created_at TEXT NOT NULL);
    CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,proposal_id TEXT NOT NULL REFERENCES proposals(id), approval_id TEXT NOT NULL, candidate_revision TEXT NOT NULL, base_revision TEXT NOT NULL, requirements_hash TEXT NOT NULL, harness_hash TEXT NOT NULL, revision_number INTEGER NOT NULL, state TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT, evidence TEXT, message TEXT);
    CREATE TABLE IF NOT EXISTS activity(id INTEGER PRIMARY KEY,ticket_id TEXT NOT NULL,proposal_id TEXT,actor TEXT NOT NULL,event TEXT NOT NULL,details TEXT NOT NULL,created_at TEXT NOT NULL);`);
-    this.ensureColumn("proposals", "investigation_origin", "TEXT NOT NULL DEFAULT 'developer-fixture'");
-    this.ensureColumn("runs", "verification_mode", "TEXT NOT NULL DEFAULT 'scripted-verification'");
+    this.ensureColumn(
+      "proposals",
+      "investigation_origin",
+      "TEXT NOT NULL DEFAULT 'developer-fixture'",
+    );
+    this.ensureColumn(
+      "runs",
+      "verification_mode",
+      "TEXT NOT NULL DEFAULT 'scripted-verification'",
+    );
     this.ensureColumn("runs", "agent_assessment", "TEXT");
     const interrupted = this.db
-      .prepare("SELECT * FROM runs WHERE state IN ('Verification running','Live Agent 2 running')")
+      .prepare(
+        "SELECT * FROM runs WHERE state IN ('Verification running','Live Agent 2 running')",
+      )
       .all() as any[];
     for (const run of interrupted) {
       this.db
@@ -64,7 +75,9 @@ export class Store {
     }
   }
   private ensureColumn(table: string, name: string, definition: string) {
-    const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as any[];
+    const columns = this.db
+      .prepare(`PRAGMA table_info(${table})`)
+      .all() as any[];
     if (!columns.some((column) => column.name === name))
       this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
   }
@@ -91,13 +104,21 @@ export class Store {
   }
   async inboxAsync(): Promise<any[]> {
     if (!this.remoteTickets) return this.inbox();
-    return (await this.remoteTickets()).map(t => ({ ...t, related_reference: null, imported: !!this.db.prepare("SELECT id FROM tickets WHERE id=?").get(t.id) }));
+    return (await this.remoteTickets()).map((t) => ({
+      ...t,
+      related_reference: null,
+      imported: !!this.db
+        .prepare("SELECT id FROM tickets WHERE id=?")
+        .get(t.id),
+    }));
   }
   async receiveTicket(id: string) {
     if (!this.remoteTickets) return this.importTicket(id);
-    const existing = this.db.prepare("SELECT * FROM tickets WHERE id=?").get(id);
+    const existing = this.db
+      .prepare("SELECT * FROM tickets WHERE id=?")
+      .get(id);
     if (existing) return existing;
-    const t = (await this.inboxAsync()).find(t => t.id === id);
+    const t = (await this.inboxAsync()).find((t) => t.id === id);
     if (!t) problem("Submitted marketplace ticket not found.", 404);
     return this.saveTicket(t);
   }
@@ -111,7 +132,9 @@ export class Store {
     return this.saveTicket(t);
   }
   private saveTicket(t: any) {
-    const existing = this.db.prepare("SELECT * FROM tickets WHERE id=?").get(t.id);
+    const existing = this.db
+      .prepare("SELECT * FROM tickets WHERE id=?")
+      .get(t.id);
     if (existing) return existing;
     const id = t.id;
     this.db
@@ -173,7 +196,9 @@ export class Store {
       timestamp = now(),
       requirements = JSON.stringify(discountRequirements);
     this.db
-      .prepare("INSERT INTO proposals(id,ticket_id,kind,base_revision,candidate_revision,requirements,requirements_hash,harness_hash,diff,explanation,state,revision_number,current_approval,last_run,created_at,updated_at,investigation_origin) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+      .prepare(
+        "INSERT INTO proposals(id,ticket_id,kind,base_revision,candidate_revision,requirements,requirements_hash,harness_hash,diff,explanation,state,revision_number,current_approval,last_run,created_at,updated_at,investigation_origin) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      )
       .run(
         id,
         ticketId,
@@ -197,9 +222,10 @@ export class Store {
         timestamp,
         investigationOrigin,
       );
-    const actor = investigationOrigin === "scripted-agent-1"
-      ? "Scripted investigation"
-      : "Developer-authored fixture";
+    const actor =
+      investigationOrigin === "scripted-agent-1"
+        ? "Scripted investigation"
+        : "Developer-authored fixture";
     this.event(ticketId, id, actor, "Proposal ready", {
       kind,
       revision: f.revision,
@@ -213,9 +239,10 @@ export class Store {
         "UPDATE approvals SET invalidated_at=? WHERE proposal_id=? AND invalidated_at IS NULL",
       )
       .run(now(), p.id);
+    this.db.prepare("DELETE FROM approved_queue WHERE proposal_id=?").run(p.id);
     this.db
       .prepare(
-        "UPDATE proposals SET current_approval=NULL,state='Awaiting engineer approval',updated_at=? WHERE id=?",
+        "UPDATE proposals SET current_approval=NULL,state='Changes requested',updated_at=? WHERE id=?",
       )
       .run(now(), p.id);
     this.event(
@@ -311,30 +338,30 @@ export class Store {
       problem("Only a ready proposal can be submitted for approval.", 409);
     this.db
       .prepare(
-        "UPDATE proposals SET state='Awaiting engineer approval',updated_at=? WHERE id=?",
+        "UPDATE proposals SET state='Ready for Agent 2',updated_at=? WHERE id=?",
       )
       .run(now(), id);
     this.event(
       p.ticket_id,
       id,
       reviewer,
-      "Awaiting engineer approval",
+      "Ready for Agent 2",
       p.candidate_revision,
     );
     return this.detail(id);
   }
-  approve(id: string, revision: string, revisionNumber: number, reviewer = "Local engineer") {
+  authorizeVerification(id: string) {
     const p = this.proposal(id);
     this.checkCurrent(p);
     if (
-      p.state !== "Awaiting engineer approval" ||
-      p.candidate_revision !== revision ||
-      p.revision_number !== revisionNumber
+      ![
+        "Proposal ready",
+        "Ready for Agent 2",
+        "Awaiting engineer approval",
+        "Changes requested",
+      ].includes(p.state)
     )
-      problem(
-        "This exact revision is not awaiting approval. Refresh and review it again.",
-        409,
-      );
+      problem("This proposal is not ready for independent verification.", 409);
     const idApproval = randomUUID(),
       timestamp = now();
     this.db
@@ -342,7 +369,7 @@ export class Store {
       .run(
         idApproval,
         id,
-        reviewer,
+        "Controller verification authorization",
         p.candidate_revision,
         p.base_revision,
         p.requirements_hash,
@@ -353,16 +380,84 @@ export class Store {
       );
     this.db
       .prepare(
-        "UPDATE proposals SET current_approval=?,state='Approved for testing',updated_at=? WHERE id=?",
+        "UPDATE proposals SET current_approval=?,state='Authorized for verification',updated_at=? WHERE id=?",
       )
       .run(idApproval, timestamp, id);
-    this.event(p.ticket_id, id, reviewer, "Approved for testing", {
-      approval: idApproval,
+    this.event(
+      p.ticket_id,
+      id,
+      "Controller",
+      "Authorized for Agent 2 verification",
+      {
+        approval: idApproval,
+        revision: p.candidate_revision,
+      },
+    );
+    return this.detail(id);
+  }
+  approve(
+    id: string,
+    revision: string,
+    revisionNumber: number,
+    reviewer = "Local engineer",
+  ) {
+    const p = this.proposal(id);
+    this.checkCurrent(p);
+    if (
+      !["Verified awaiting engineer review", "Failed", "Inconclusive"].includes(
+        p.state,
+      ) ||
+      p.candidate_revision !== revision ||
+      p.revision_number !== revisionNumber
+    )
+      problem(
+        "A completed live Agent 2 review of this exact revision is required before approval.",
+        409,
+      );
+    const authorization = this.approvalFor(p);
+    const run = this.db
+      .prepare("SELECT * FROM runs WHERE id=?")
+      .get(p.last_run ?? "") as any;
+    if (
+      !run ||
+      !["Verified awaiting engineer review", "Failed", "Inconclusive"].includes(
+        run.state,
+      ) ||
+      !run.finished_at ||
+      run.verification_mode !== "live-agent-2" ||
+      run.approval_id !== authorization.id ||
+      run.candidate_revision !== p.candidate_revision ||
+      run.base_revision !== p.base_revision ||
+      run.requirements_hash !== p.requirements_hash ||
+      run.harness_hash !== p.harness_hash ||
+      run.revision_number !== p.revision_number
+    )
+      problem(
+        "A completed live Agent 2 review of this exact revision is required before approval.",
+        409,
+      );
+    const timestamp = now();
+    this.db
+      .prepare(
+        "INSERT INTO approved_queue VALUES(?,?,?,?,?) ON CONFLICT(proposal_id) DO NOTHING",
+      )
+      .run(id, reviewer, p.candidate_revision, p.revision_number, timestamp);
+    this.db
+      .prepare("UPDATE proposals SET state='Approved',updated_at=? WHERE id=?")
+      .run(timestamp, id);
+    this.event(p.ticket_id, id, reviewer, "Added to Approved queue", {
       revision: p.candidate_revision,
+      revisionNumber: p.revision_number,
+      purpose: "Human engineer PR preparation",
     });
     return this.detail(id);
   }
-  decision(id: string, action: "changes" | "reject", note: string, reviewer = "Local engineer") {
+  decision(
+    id: string,
+    action: "changes" | "reject",
+    note: string,
+    reviewer = "Local engineer",
+  ) {
     const p = this.proposal(id);
     if (p.state === "Verification running")
       problem("Verification is running; review it after completion.", 409);
@@ -388,12 +483,12 @@ export class Store {
       a.requirements_hash !== p.requirements_hash
     )
       problem(
-        "Engineer approval of this exact revision is required before verification.",
+        "Controller authorization of this exact revision is required before verification.",
         403,
       );
     if (
       ![
-        "Approved for testing",
+        "Authorized for verification",
         "Live Agent 2 running",
         "Failed",
         "Inconclusive",
@@ -424,6 +519,10 @@ export class Store {
       }));
     return {
       ...p,
+      queueApproval:
+        this.db
+          .prepare("SELECT * FROM approved_queue WHERE proposal_id=?")
+          .get(id) || null,
       requirements: JSON.parse(p.requirements),
       ticket,
       approvals,
@@ -442,7 +541,8 @@ export class Store {
             ? "Scripted investigation + developer-authored proposal"
             : "Developer-authored sample",
       investigationOrigin:
-        p.kind === "agent-generated" || p.investigation_origin === "live-agent-1"
+        p.kind === "agent-generated" ||
+        p.investigation_origin === "live-agent-1"
           ? "Live Agent 1"
           : p.investigation_origin === "scripted-agent-1"
             ? "Scripted investigation + developer-authored proposal"
@@ -453,9 +553,10 @@ export class Store {
         p.kind === "agent-generated"
           ? JSON.parse(this.agentCandidate(id).evidence)
           : null,
-      execution: runs[0]?.verification_mode === "live-agent-2"
-        ? "Live Agent 2 + mandatory scripted verification"
-        : "Scripted verification only",
+      execution:
+        runs[0]?.verification_mode === "live-agent-2"
+          ? "Live Agent 2 + mandatory scripted verification"
+          : "Scripted verification only",
     };
   }
   list() {

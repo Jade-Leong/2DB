@@ -396,7 +396,8 @@ export class AgentService {
           "The SDK submitted a request to the protected API broker.",
         );
         const body = structuredActionRequest(
-          Buffer.from(message.body, "base64").toString("utf8"), status.model,
+          Buffer.from(message.body, "base64").toString("utf8"),
+          status.model,
         );
         await withModelRequestDeadline(
           (requestSignal) =>
@@ -632,8 +633,8 @@ export class AgentService {
             );
             this.finish(
               id,
-              "Awaiting engineer review",
-              "Awaiting engineer approval for testing. Agent-generated candidate has not executed.",
+              "Ready for Agent 2",
+              "Agent 1 proposed a change. Agent 2 can now check the implementation and flag concerns.",
             );
             return proposal;
           } else {
@@ -709,8 +710,11 @@ export class AgentService {
     const diff = actualDiff(base, candidate);
     if (!diff.diff || diff.base !== run.base_revision)
       problem("Source integrity failed.");
-    const changedFiles = sourceFiles(base).filter(name =>
-      !readFileSync(path.join(base, name)).equals(readFileSync(path.join(candidate, name))),
+    const changedFiles = sourceFiles(base).filter(
+      (name) =>
+        !readFileSync(path.join(base, name)).equals(
+          readFileSync(path.join(candidate, name)),
+        ),
     );
     const report = conclusion(details, candidate, changedFiles);
     const id = randomUUID(),
@@ -731,7 +735,7 @@ export class AgentService {
         harnessRevision(),
         diff.diff,
         summary.slice(0, 8000),
-        "Awaiting engineer approval",
+        "Ready for Agent 2",
         1,
         null,
         null,
@@ -765,7 +769,8 @@ export class AgentService {
         threadId: run.thread_id,
         runId,
         revision: diff.candidate,
-        execution: "Candidate has not executed. Engineer approval required.",
+        execution:
+          "Candidate has not executed. Agent 2 review is required before human approval.",
       },
     );
     return this.store.detail(id);

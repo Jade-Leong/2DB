@@ -73,12 +73,12 @@ The original marketplace source is never patched. Review the full base/candidate
 For each sample candidate:
 
 1. Inspect its **Local change proposal** and source diff.
-2. Select **Submit revision for engineer approval**.
-3. Select **Approve this revision for testing**, **Request changes**, or **Reject proposal**.
-4. Approval records the reviewer, timestamp, exact candidate/base hashes, revision counter, requirements hash, and trusted harness hash.
-5. Replacing the candidate with another reviewed fixture invalidates prior approval. An on-disk edit to a frozen fixture is detected before execution and refused; unreviewed code is never executed.
+2. Select **Start Agent 2** to test the exact revision and flag concerns.
+3. Review Agent 2's evidence, then select **Approve**, **Request changes**, or **Reject proposal**.
+4. Human approval records the reviewer, timestamp, exact candidate revision, and revision counter in the **Approved** queue for human PR preparation.
+5. Replacing the candidate invalidates prior verification. An on-disk edit to a frozen fixture is detected before execution and refused; unreviewed code is never executed.
 
-Approval permits testing only. No action approves, merges, or deploys code. Agent 1 now shows worker setup/readiness. Agent 2 says **Live agent not connected — scripted verification available**.
+Approval does not create, merge, or deploy code. It queues the Agent 2-reviewed proposal for a human engineer to create a pull request.
 
 ## Run actual baseline-versus-candidate verification
 

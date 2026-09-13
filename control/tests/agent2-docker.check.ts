@@ -22,7 +22,6 @@ const store = new Store(path.join(root, "controller"), tickets);
 try {
   let proposal = store.create("discount-agent2", "discount-fix", "scripted-agent-1");
   proposal = store.submit(proposal.id, "Explicit test engineer");
-  proposal = store.approve(proposal.id, proposal.candidate_revision, proposal.revision_number, "Explicit test engineer");
   const status = await agent2Status();
   const isolated = { ...status, state: "Ready", authentication: { ready: true, message: "Mocked model layer; no API call" }, model: "mocked-no-api" } as any;
   assert.equal(isolated.isolation.ready, true);

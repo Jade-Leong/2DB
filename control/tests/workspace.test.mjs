@@ -18,9 +18,11 @@ for(const scenario of scenarios) test(`workspace ${scenario}: truthful actions, 
   assert.equal(await page.locator('[data-action="scripted-demo"], [data-action="create"], [data-action="check-tavily"]').count(),0);
   if(scenario==='idle') assert.equal(await page.getByRole('button',{name:'Start Agent 1 →',exact:true}).isEnabled(),true);
   if(scenario==='running') {assert.equal(await page.locator('[data-action="investigate"]').count(),0);assert.equal(await page.getByRole('button',{name:'Cancel investigation'}).isVisible(),true);}
-  if(scenario==='proposal-ready') {assert.equal(await page.locator('[data-action="verify-live"]').count(),0);await page.getByRole('button',{name:'Review proposed change →'}).click();assert.equal(await page.getByRole('button',{name:'Approve',exact:true}).isVisible(),true);}
+  if(scenario==='proposal-ready') assert.equal(await page.getByRole('button',{name:'Start Agent 2 →',exact:true}).isEnabled(),true);
   if(scenario==='approved') assert.equal(await page.getByRole('button',{name:'Start Agent 2 →'}).isEnabled(),true);
   if(scenario==='verification-running') assert.equal(await page.getByRole('button',{name:'Cancel verification'}).isVisible(),true);
+  if(scenario==='completed') {await page.getByRole('button',{name:'Review and approve →'}).click();assert.equal(await page.getByRole('button',{name:'Approve',exact:true}).isVisible(),true);}
+  if(scenario==='approved-queue') {await page.getByRole('button',{name:'Approved',exact:true}).click();assert.equal(await page.locator('.ticket').count(),1);assert.match(await page.locator('.next-heading').innerText(),/Approved for human PR work/);}
   if (await page.locator('[data-agent-detail="build"]').getAttribute('open') === null) await page.locator('[data-agent-detail="build"] > summary').click();
   await page.locator('[data-agent-detail="verify"] > summary').click();
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
@@ -36,11 +38,11 @@ for(const scenario of scenarios) test(`workspace ${scenario}: truthful actions, 
   assert.equal(fixture.requests.some(r=>r.method!=='GET'),false);
  }finally{await page.close();}
 });
-test('polling preserves expanded review, focus and scroll with approve or deny only',async()=>{
- fixture.setScenario('proposal-ready');const page=await browser.newPage({viewport:{width:1440,height:900},reducedMotion:'reduce'});
+test('polling preserves expanded review, focus and scroll at human approval',async()=>{
+ fixture.setScenario('completed');const page=await browser.newPage({viewport:{width:1440,height:900},reducedMotion:'reduce'});
  try {
-  await page.goto(origin);await page.locator('.ticket').first().click();await page.getByRole('button',{name:'Review proposed change →'}).click();
-  const details=page.getByText('Revision & approval details',{exact:true});await details.click();
+  await page.goto(origin);await page.locator('.ticket').first().click();await page.getByRole('button',{name:'Review and approve →'}).click();
+  const details=page.getByText('Revision details',{exact:true});await details.click();
   await page.getByRole('button',{name:'Approve',exact:true}).focus();
   const before=await page.locator('.detail-column').evaluate(el=>el.scrollTop);
   await page.evaluate(()=>refresh());
@@ -58,7 +60,7 @@ test('read marker clears on opening a ticket and persists after reload',async()=
  fixture.setScenario('idle');const page=await browser.newPage({viewport:{width:1440,height:900}});
  try {
   await page.goto(origin);await page.locator('.ticket').first().waitFor();
-  assert.equal(await page.locator('.inbox-count').innerText(),'10 unread\n10 tickets');
+  assert.equal(await page.locator('.inbox-count').innerText(),'10 unread\n0 approved');
   await page.locator('.ticket').first().click();await page.locator('.next-action').waitFor();
   assert.equal(await page.locator('.ticket').first().locator('.read-marker').innerText(),'Read');
   assert.match(await page.locator('.inbox-count').innerText(),/9 unread/);

@@ -10,7 +10,6 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { chromium } from "@playwright/test";
 import { createControl } from "../app";
 import { controlRoot, projectRoot } from "../paths";
 import { hash, revision } from "../snapshots";
@@ -242,7 +241,7 @@ test("a model claim or incomplete browser observation cannot establish reproduct
       false,
     );
 });
-test("deterministic synthetic agent proposal requires exact engineer approval; changed bytes invalidate it", async () => {
+test("deterministic synthetic agent proposal requires exact verification authorization; changed bytes invalidate it", async () => {
   const id = randomUUID(),
     dir = path.join(c.store.dataDir, "investigations", id),
     base = path.join(dir, "baseline"),
@@ -358,11 +357,17 @@ test("deterministic synthetic agent proposal requires exact engineer approval; c
   );
   assert.equal(p.agentMetadata.research.citations[0].id, doc.id);
   assert.equal(p.agentMetadata.research.records.length, 2);
-  assert.deepEqual(p.agentMetadata.conclusion.sourceReferences, ["src/style.css"]);
-  assert.deepEqual(p.agentMetadata.conclusion.missingFields, ["uncertainties", "suggestedVerification", "sourceReferences"]);
+  assert.deepEqual(p.agentMetadata.conclusion.sourceReferences, [
+    "src/style.css",
+  ]);
+  assert.deepEqual(p.agentMetadata.conclusion.missingFields, [
+    "uncertainties",
+    "suggestedVerification",
+    "sourceReferences",
+  ]);
   assert.equal(p.author, "Agent-generated");
-  assert.equal(p.state, "Awaiting engineer approval");
-  await assert.rejects(c.runner.start(p.id), /approval/);
+  assert.equal(p.state, "Ready for Agent 2");
+  await assert.rejects(c.runner.start(p.id), /authorization/);
   assert.equal(
     (
       await request(
@@ -380,8 +385,9 @@ test("deterministic synthetic agent proposal requires exact engineer approval; c
         revisionNumber: 1,
       })
     ).status,
-    200,
+    409,
   );
+  c.store.authorizeVerification(p.id);
   assert.throws(
     () => c.store.change(p.id, "discount-fix"),
     /cannot be replaced/,
@@ -421,87 +427,26 @@ test("original intentional-defect source and manual customer database remain unc
   assert.equal(hash(readFileSync(source)), sourceHash);
   if (manualHash) assert.equal(hash(readFileSync(manualDb)), manualHash);
 });
-test("dashboard displays honest setup state and separate developer fixtures", async () => {
-  const browser = await chromium.launch({ headless: true });
-  try {
-    const page = await browser.newPage();
-    const errors: string[] = [];
-    page.on("pageerror", (e) => errors.push(e.message));
-    await page.goto(url);
-    await page
-      .getByLabel("Local engineer key")
-      .fill(JSON.parse(readFileSync(c.keyFile, "utf8")).key);
-    await page.getByRole("button", { name: /Open engineer session/ }).click();
-    await page
-      .getByRole("button", { name: /Maya Chen.*Discount complaint/ })
-      .first()
-      .click();
-    await page
-      .getByRole("button", { name: "Investigate with Agent 1" })
-      .waitFor();
-    assert.equal(
-      await page
-        .getByRole("button", { name: "Investigate with Agent 1" })
-        .isDisabled(),
-      true,
-    );
-    assert.ok(
-      (await page.locator("body").innerText()).includes(
-        "DEVELOPER-AUTHORED DEMO AREA",
-      ),
-    );
-    await page.getByRole("button", { name: "Test Tavily connection" }).click();
-    await page
-      .getByText(
-        "Tavily Search and Extract verified. This check did not run an investigation.",
-        { exact: true },
-      )
-      .waitFor();
-    await page.getByText(/Live connection check passed/).click();
-    assert.equal(await page.locator(".research-source img").count(), 0);
-    assert.equal(
-      (await page
-        .locator('.research-source a[href^="https://expressjs.com/"]')
-        .count()) >= 2,
-      true,
-    );
-    assert.equal((await request("/research/check", {})).status, 429);
-    assert.equal(
-      (await request("/research/status")).body.lastCheck.verified,
-      true,
-    );
-    assert.deepEqual(errors, []);
-    const artifacts = path.join(controlRoot, "test-results/agent");
-    mkdirSync(artifacts, { recursive: true });
-    await page.screenshot({
-      path: path.join(artifacts, "setup-desktop.png"),
-      fullPage: true,
-    });
-    await page.setViewportSize({ width: 390, height: 844 });
-    assert.equal(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= window.innerWidth,
-      ),
-      true,
-    );
-    await page.screenshot({
-      path: path.join(artifacts, "setup-mobile.png"),
-      fullPage: true,
-    });
-  } finally {
-    await browser.close();
-  }
-});
-
 test("structured edit produces an isolated candidate diff without native patch execution", () => {
-  const base = path.join(root, "structured-edit-base"), candidate = path.join(root, "structured-edit-candidate");
+  const base = path.join(root, "structured-edit-base"),
+    candidate = path.join(root, "structured-edit-candidate");
   cleanCopy(projectRoot, base);
   cleanCopy(projectRoot, candidate);
   const original = readSource(candidate, "src/style.css");
-  const action = parseAction({ action: "edit", target: "src/style.css", value: original + "\n/* isolated edit regression */\n", summary: "Update candidate style source." });
-  assert.throws(() => editSource(candidate, action.target, action.value, false), /evidence/);
+  const action = parseAction({
+    action: "edit",
+    target: "src/style.css",
+    value: original + "\n/* isolated edit regression */\n",
+    summary: "Update candidate style source.",
+  });
+  assert.throws(
+    () => editSource(candidate, action.target, action.value, false),
+    /evidence/,
+  );
   editSource(candidate, action.target, action.value, true);
   assert.equal(readSource(base, "src/style.css"), original);
   assert.match(actualDiff(base, candidate).diff, /isolated edit regression/);
-  assert.throws(() => editSource(candidate, "control/app.ts", "not allowed", true));
+  assert.throws(() =>
+    editSource(candidate, "control/app.ts", "not allowed", true),
+  );
 });

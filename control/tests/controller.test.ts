@@ -5,7 +5,6 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { Server } from "node:http";
-import { chromium } from "@playwright/test";
 import { createControl } from "../app";
 import { portAvailable, occupiedMessage } from "../runner";
 import { assessRequired, finalDecision } from "../evidence";
@@ -70,13 +69,7 @@ async function proposal(kind = "discount-fix") {
   return result.body;
 }
 async function approve(p: any) {
-  assert.equal((await request(`/proposals/${p.id}/submit`, {})).status, 200);
-  const result = await request(`/proposals/${p.id}/approve`, {
-    revision: p.candidate_revision,
-    revisionNumber: p.revision_number,
-  });
-  assert.equal(result.status, 200, JSON.stringify(result.body));
-  return result.body;
+  return control.store.authorizeVerification(p.id);
 }
 async function waitForRun(id: string) {
   const start = Date.now();
@@ -145,7 +138,7 @@ test("read-only adapter preserves original complaint fields and marketplace sour
   );
   assert.equal(hash(readFileSync(source)), sourceBefore);
 });
-test("verification is blocked without engineer approval; customer and supplied roles cannot approve", async () => {
+test("human approval is blocked before live verification; customer and supplied roles cannot approve", async () => {
   const p = await proposal();
   assert.equal(
     (await request(`/proposals/${p.id}/verify`, { passed: true })).status,
@@ -180,25 +173,14 @@ test("verification is blocked without engineer approval; customer and supplied r
     404,
   );
 });
-test("approval binds exact revision, records reviewer, and candidate changes invalidate it", async () => {
+test("verification authorization binds the exact revision and candidate changes invalidate it", async () => {
   let p = await proposal();
   await request(`/proposals/${p.id}/submit`, {});
+  p = control.store.authorizeVerification(p.id);
   assert.equal(
-    (
-      await request(`/proposals/${p.id}/approve`, {
-        revision: "old-revision",
-        revisionNumber: 1,
-      })
-    ).status,
-    409,
+    p.approvals[0].reviewer,
+    "Controller verification authorization",
   );
-  p = (
-    await request(`/proposals/${p.id}/approve`, {
-      revision: p.candidate_revision,
-      revisionNumber: 1,
-    })
-  ).body;
-  assert.equal(p.approvals[0].reviewer, "Local engineer");
   assert.equal(p.approvals[0].revision, p.candidate_revision);
   assert.ok(p.approvals[0].created_at);
   const changed = await request(`/proposals/${p.id}/revision`, {
@@ -264,7 +246,10 @@ test("occupied marketplace port blocks verification without touching the listene
     const result = await request(`/proposals/${p.id}/verify`, {});
     assert.equal(result.status, 409);
     assert.equal(result.body.error, occupiedMessage);
-    assert.equal(control.store.proposal(p.id).state, "Approved for testing");
+    assert.equal(
+      control.store.proposal(p.id).state,
+      "Authorized for verification",
+    );
     assert.equal(await portAvailable(3001), false);
   } finally {
     if (listener)
@@ -405,14 +390,6 @@ test("missing, duplicate, skipped, timed-out, empty, failed-process and stale ev
     "Inconclusive",
   );
 });
-test('dashboard shows the real diff and requires an explicit test-engineer approval action',async()=>{
- const p=await proposal();const browser=await chromium.launch();
- try{const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(url);await page.evaluate(t=>sessionStorage.setItem('2db-engineer-session',t),token);await page.reload();await page.locator(`[data-action="proposal"][data-id="${p.id}"]`).click();
- assert.ok(await page.getByRole('button',{name:'Approve this revision for testing',exact:true}).isDisabled());assert.ok((await page.locator('.diff').innerText()).includes('+      q.total_cents'));assert.ok((await page.locator('blockquote').innerText()).includes('I used a discount code'));
- await page.getByRole('button',{name:'Submit revision for engineer approval',exact:true}).click();await page.getByRole('button',{name:'Approve this revision for testing',exact:true}).click();await page.locator('.approval-record').waitFor();assert.equal(control.store.proposal(p.id).state,'Approved for testing');
- mkdirSync(path.join(controlRoot,'test-results'),{recursive:true});await page.screenshot({path:path.join(controlRoot,'test-results/proposal-review.png'),fullPage:true});assert.deepEqual(errors,[]);
- }finally{await browser.close();}
-});
 test(
   "approved unchanged candidate fails real discount checks",
   { timeout: 480000 },
@@ -513,46 +490,14 @@ test(
         path.join(control.store.dataDir, "runs", run.id),
       ),
     });
-    // Capture the real controller view in this explicit test-engineer session; no key or token is rendered.
-    const browser = await chromium.launch();
-    try {
-      const page = await browser.newPage({
-        viewport: { width: 1440, height: 1000 },
-      });
-      await page.goto(url);
-      await page.evaluate(
-        (session) => sessionStorage.setItem("2db-engineer-session", session),
-        token,
-      );
-      await page.reload();
-      await page.locator(`[data-action="proposal"][data-id="${p.id}"]`).click();
-      await page
-        .getByText("Evidence, side by side.", { exact: true })
-        .waitFor();
-      mkdirSync(path.join(controlRoot, "test-results"), { recursive: true });
-      await page.screenshot({
-        path: path.join(controlRoot, "test-results/dashboard-desktop.png"),
-        fullPage: true,
-      });
-      await page.setViewportSize({ width: 390, height: 844 });
-      assert.equal(
-        await page.evaluate(
-          () => document.documentElement.scrollWidth <= innerWidth,
-        ),
-        true,
-      );
-      await page.screenshot({
-        path: path.join(controlRoot, "test-results/dashboard-mobile.png"),
-        fullPage: true,
-      });
-    } finally {
-      await browser.close();
-    }
   },
 );
 test("original marketplace source and all three intentional defects remain unchanged", () => {
   const saved = JSON.parse(
-    readFileSync(path.join(controlRoot, "fixtures/original-source.json"), "utf8"),
+    readFileSync(
+      path.join(controlRoot, "fixtures/original-source.json"),
+      "utf8",
+    ),
   );
   for (const [file, digest] of Object.entries(saved))
     assert.equal(

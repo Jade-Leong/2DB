@@ -66,9 +66,10 @@ Use that key on the 2DB sign-in screen. This is a local demo approval mechanism,
 3. Open the discount complaint in 2DB.
 4. Under **Agent 1 · Scripted demonstration**, select **Prepared discount fix** and click **Use scripted demo**.
 5. Wait for **Awaiting engineer review**. Open the fresh screenshot and observed-values artifact. Expected reproduction evidence is displayed/order `3840` cents and payment `4800` cents.
-6. Open the proposal, read the actual diff and hashes, then click **Approve this revision for testing**. The scripted demonstration cannot approve itself.
-7. Confirm Agent 2 shows **Ready**, then click **Verify with live Agent 2**. Billable API use starts only because you clicked it.
-8. Review the mandatory baseline/candidate checks and live browser actions. The model assessment, executed checks, and controller status are separate.
+6. Open the proposal and review the actual diff and hashes.
+7. Confirm Agent 2 shows **Ready**, then click **Start Agent 2**. The controller records an internal, revision-bound authorization to execute the isolated candidate. This is not human approval. Billable API use starts only because you clicked it.
+8. Review the mandatory baseline/candidate checks, live browser actions, and any issues Agent 2 flags.
+9. Decide whether the Agent 2-reviewed change is ready for human PR work. You may approve after a passed, failed, or inconclusive completed Agent 2 review because the final judgment is human. Click **Approve** to move the exact revision into the **Approved** queue. It does not create, merge, or deploy a pull request.
 
 For a real failure demonstration, choose **Unchanged negative control** in step 4. Its required checks fail; approval cannot make it pass, and live exploration does not run after the mandatory failure.
 
@@ -81,10 +82,12 @@ The prepared fix reaches **Verified awaiting engineer review** only when all eig
 ## Fully live mode
 
 1. Confirm both status commands report **Ready**.
-2. Open the discount ticket and click **Investigate with Agent 1**.
+2. Open the discount ticket and click **Start Agent 1**.
 3. If Agent 1 produces a proposal, review its evidence and exact controller-computed diff.
-4. Approve that exact revision.
-5. Click **Verify with live Agent 2**.
+4. Click **Start Agent 2** to independently check the implementation and surface concerns.
+5. Review Agent 2's findings. Click **Approve** only when the exact reviewed revision is ready for a human engineer to turn into a pull request. Agent 2 may flag failures or uncertainty; the human retains the decision.
+
+The **Approved** inbox filter is the human PR work queue. Approval is an internal queue transition only; GitHub credentials are not configured or required.
 
 A failed live Agent 1 run remains visible. The controller never switches modes automatically.
 

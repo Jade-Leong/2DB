@@ -122,7 +122,7 @@ function evidenceView(p, run) {
   const evidence = current ? run.evidence : null,
     base = evidence?.baseline?.required?.assessment,
     candidate = evidence?.candidate?.required?.assessment;
-  return `<section class="panel"><div class="section-title"><div><span class="eyebrow">${run?.verification_mode === "live-agent-2" ? "LIVE VERIFICATION" : "AUTOMATED CHECKS"}</span><h3>Verification evidence</h3></div>${run ? badge(current ? run.state : "Stale evidence — approval or revision changed") : badge("Not run")}</div>${run ? `<p class="run-message">${esc(current ? run.message || "Executing the trusted Playwright harness…" : "This evidence is archived and cannot verify the current revision.")}</p><p class="small muted">Run ${esc(run.id)} · ${esc(run.verification_mode || "scripted-verification")}<br>${date(run.started_at)} → ${date(run.finished_at)}</p>` : '<p class="muted">Approval is required before independent candidate verification can start.</p>'}${agent2Assessment(run)}<div class="table-scroll"><table><thead><tr><th>Required check</th><th>Baseline</th><th>Candidate</th></tr></thead><tbody>${p.requirements
+  return `<section class="panel"><div class="section-title"><div><span class="eyebrow">${run?.verification_mode === "live-agent-2" ? "LIVE VERIFICATION" : "AUTOMATED CHECKS"}</span><h3>Verification evidence</h3></div>${run ? badge(current ? run.state : "Stale evidence — approval or revision changed") : badge("Not run")}</div>${run ? `<p class="run-message">${esc(current ? run.message || "Executing the trusted Playwright harness…" : "This evidence is archived and cannot verify the current revision.")}</p><p class="small muted">Run ${esc(run.id)} · ${esc(run.verification_mode || "scripted-verification")}<br>${date(run.started_at)} → ${date(run.finished_at)}</p>` : '<p class="muted">Agent 2 has not reviewed this revision yet.</p>'}${agent2Assessment(run)}<div class="table-scroll"><table><thead><tr><th>Required check</th><th>Baseline</th><th>Candidate</th></tr></thead><tbody>${p.requirements
     .map((r) => {
       const b = base?.checks.find((x) => x.id === r.id),
         c = candidate?.checks.find((x) => x.id === r.id);
@@ -187,8 +187,8 @@ root.addEventListener("click", async (event) => {
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       return;
     }
-    if (action === "filter-all" || action === "filter-unread") {
-      inboxReadFilter = action === "filter-unread" ? "unread" : "all";
+    if (["filter-all", "filter-unread", "filter-approved"].includes(action)) {
+      inboxReadFilter = action.replace("filter-", "");
       render();
       return;
     } else if (action === "show-inbox" || action === "show-ticket") {
@@ -279,10 +279,11 @@ root.addEventListener("click", async (event) => {
           kind: document.getElementById("fixture").value,
         });
       else if (action === "approve") {
-        const revision = selected.candidate_revision, revisionNumber = selected.revision_number;
-        if (["Proposal ready", "Changes requested"].includes(selected.state))
-          await api(`/proposals/${id}/submit`, {});
-        selected = await api(`/proposals/${id}/approve`, { revision, revisionNumber });
+        selected = await api(`/proposals/${id}/approve`, {
+          revision: selected.candidate_revision,
+          revisionNumber: selected.revision_number,
+        });
+        notice = "Approved. This ticket is now in the human PR queue.";
       } else if (action === "reject")
         selected = await api(`/proposals/${id}/reject`, { note: "" });
       else if (action === "verify") {

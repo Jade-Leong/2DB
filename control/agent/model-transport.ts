@@ -1,4 +1,25 @@
 import { setTimeout as delay } from "node:timers/promises";
+// The SDK is a structured decision producer here, not a native tool executor.
+// Enforce this in the trusted broker even if an SDK version advertises extra tools.
+export function structuredActionRequest(body: string, expectedModel: string): string {
+  const request = JSON.parse(body);
+  if (!request || typeof request !== "object" || Array.isArray(request) || request.model !== expectedModel)
+    throw new Error("Model selection changed or request is invalid");
+  return JSON.stringify({
+    ...request,
+    tools: [],
+    tool_choice: "none",
+    parallel_tool_calls: false,
+    instructions: (typeof request.instructions === "string" ? request.instructions + "\n\n" : "") +
+      "2DB execution contract: Return only the JSON action required by the response schema. " +
+      "Native tools, including apply_patch and shell commands, are unavailable. " +
+      "To edit application source, return action=edit, target=the allowed source path, and value=the complete new file contents. " +
+      "The controller validates and applies that action to the candidate after browser reproduction. " +
+      "The SDK worker's read-only sandbox is not the candidate workspace. Do not try to modify it or infer that controller edits are unavailable. " +
+      "After the controller confirms the edit was saved, submit the proposal for engineer approval; Agent 2 executes verification later. Never claim an edit or test succeeded without controller evidence.",
+  });
+}
+
 // Retain only fixed error codes and messages; never persist provider response text.
 const codes = new Set([
   "credit_balance_exhausted",

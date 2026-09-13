@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import {
+  structuredActionRequest,
   requestModelWithRetry,
   withModelRequestDeadline,
   ModelRequestError,
@@ -394,10 +395,9 @@ export class AgentService {
           "Model request",
           "The SDK submitted a request to the protected API broker.",
         );
-        const body = Buffer.from(message.body, "base64").toString("utf8"),
-          parsed = JSON.parse(body);
-        if (parsed.model !== status.model)
-          throw new Error("Model selection changed");
+        const body = structuredActionRequest(
+          Buffer.from(message.body, "base64").toString("utf8"), status.model,
+        );
         await withModelRequestDeadline(
           (requestSignal) =>
             requestModelWithRetry(

@@ -492,3 +492,16 @@ test("dashboard displays honest setup state and separate developer fixtures", as
     await browser.close();
   }
 });
+
+test("structured edit produces an isolated candidate diff without native patch execution", () => {
+  const base = path.join(root, "structured-edit-base"), candidate = path.join(root, "structured-edit-candidate");
+  cleanCopy(projectRoot, base);
+  cleanCopy(projectRoot, candidate);
+  const original = readSource(candidate, "src/style.css");
+  const action = parseAction({ action: "edit", target: "src/style.css", value: original + "\n/* isolated edit regression */\n", summary: "Update candidate style source." });
+  assert.throws(() => editSource(candidate, action.target, action.value, false), /evidence/);
+  editSource(candidate, action.target, action.value, true);
+  assert.equal(readSource(base, "src/style.css"), original);
+  assert.match(actualDiff(base, candidate).diff, /isolated edit regression/);
+  assert.throws(() => editSource(candidate, "control/app.ts", "not allowed", true));
+});

@@ -288,3 +288,25 @@ test("cancellation interrupts retry waiting and no further requests run", async 
   );
   assert.equal(calls, 1);
 });
+
+test("broker removes SDK native tools while preserving the structured action schema and history", async () => {
+  const { structuredActionRequest } = await import("../agent/model-transport");
+  const request = {
+    model: "synthetic-model", stream: true,
+    instructions: "SDK defaults may suggest apply_patch.",
+    tools: [{ type: "custom", name: "apply_patch" }, { type: "function", name: "shell" }],
+    tool_choice: { type: "custom", name: "apply_patch" }, parallel_tool_calls: true,
+    input: [{ role: "user", content: "Make a scoped source edit." }],
+    text: { format: { type: "json_schema", name: "action", schema: { type: "object" } } },
+  };
+  const forwarded = JSON.parse(structuredActionRequest(JSON.stringify(request), request.model));
+  assert.deepEqual(forwarded.tools, []);
+  assert.equal(forwarded.tool_choice, "none");
+  assert.equal(forwarded.parallel_tool_calls, false);
+  assert.deepEqual(forwarded.input, request.input);
+  assert.deepEqual(forwarded.text, request.text);
+  assert.equal(forwarded.stream, true);
+  assert.match(forwarded.instructions, /action=edit/);
+  assert.throws(() => structuredActionRequest(JSON.stringify(request), "different-model"), /Model selection/);
+  assert.throws(() => structuredActionRequest("null", request.model), /invalid/);
+});

@@ -109,7 +109,7 @@ export function createControl(
     const token = req.header("Authorization")?.replace(/^Bearer /, "");
     if (!token || !sessions.has(token) || sessions.get(token)!.expiresAt < Date.now())
       problem(
-        "Log in to 2db again, or use local engineer access. Marketplace accounts cannot authorize review.",
+        "Sign in to 2db again, or use local engineer access. Marketplace accounts cannot authorize review.",
         401,
       );
     res.locals.reviewer = sessions.get(token!)!.reviewer;

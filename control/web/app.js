@@ -340,11 +340,13 @@ root.addEventListener("click", async (event) => {
       return;
     }
     else if (action === "github-connect" || action === "github-install-more") {
+      // Open synchronously in the click handler so browser popup blockers allow it.
+      const popup = window.open("about:blank", "2db-github-install", "width=720,height=820");
+      if (!popup) { error = "Popup was blocked. Allow popups and try again."; render(); return; }
       githubBusy = true; render();
       try {
         const { url } = await api("/github/install-url", {});
-        const popup = window.open(url, "2db-github-install", "width=720,height=820");
-        if (!popup) throw new Error("Popup was blocked. Allow popups and try again.");
+        popup.location.href = url;
         const wasConnected = !!githubStatus?.connected;
         const poll = setInterval(async () => {
           try {
@@ -360,7 +362,7 @@ root.addEventListener("click", async (event) => {
           } catch {}
           if (popup.closed) { clearInterval(poll); githubBusy = false; render(); }
         }, 1500);
-      } catch (e) { error = e.message; githubBusy = false; render(); }
+      } catch (e) { popup.close(); error = e.message; githubBusy = false; render(); }
       return;
     }
     else if (action === "github-disconnect") {

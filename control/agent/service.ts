@@ -249,17 +249,13 @@ export class AgentService {
     reproduced: boolean,
     signal: AbortSignal,
   ) {
-    if (!reproduced)
-      problem(
-        "Reproduce the complaint before requesting external documentation.",
-      );
     const result = await research.execute(action, target, value, signal);
     this.event(
       id,
       "Researching with Tavily",
       result.error ||
         `Tavily ${action === "search_docs" ? "Search" : "Extract"} returned ${result.sources.length} documentation sources.`,
-      result,
+      { ...result, phase: reproduced ? "diagnosis" : "reproduction research" },
     );
     return result;
   }

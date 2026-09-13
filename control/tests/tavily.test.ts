@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { AgentService } from "../agent/service";
+import { editSource, mismatch } from "../agent/policy";
 import {
   ResearchSession,
   allowedDocUrl,
@@ -29,6 +31,41 @@ function fake(calls: any[] = []): typeof fetch {
     });
   }) as typeof fetch;
 }
+test("controller permits research before reproduction without granting browser proof or editing access", async () => {
+  const events: any[] = [];
+  const controller = {
+    event: (...args: any[]) => events.push(args),
+  } as unknown as AgentService;
+  const research = new ResearchSession(fake());
+  const search = await AgentService.prototype.researchAction.call(
+    controller,
+    "test-run",
+    "search_docs",
+    "express",
+    "Express 5 rejected promises",
+    research,
+    false,
+    signal(),
+  );
+  const extract = await AgentService.prototype.researchAction.call(
+    controller,
+    "test-run",
+    "extract_docs",
+    search.sources[0].id,
+    "",
+    research,
+    false,
+    signal(),
+  );
+  assert.equal(extract.sources[0].stage, "extract");
+  assert.equal(events.length, 2);
+  assert.equal(events[0][3].phase, "reproduction research");
+  assert.ok(!mismatch(extract, "buyer-maya", "baseline"));
+  assert.throws(
+    () => editSource("/unused", "server/unused.ts", "", false),
+    /Browser evidence/,
+  );
+});
 test("search/extract are host REST calls with bounded payloads, citations and cached repeats", async () => {
   const calls: any[] = [],
     r = new ResearchSession(fake(calls));

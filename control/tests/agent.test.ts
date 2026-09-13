@@ -308,28 +308,16 @@ test("deterministic synthetic agent proposal requires exact engineer approval; c
     true,
   );
   const research = new ResearchSession(syntheticDocsFetch);
-  await assert.rejects(
-    c.agent.researchAction(
-      id,
-      "search_docs",
-      "express",
-      "Express 5 promises",
-      research,
-      false,
-      new AbortController().signal,
-    ),
-    /Reproduce/,
-  );
-  assert.equal(research.records.length, 0);
   const found = await c.agent.researchAction(
     id,
     "search_docs",
     "express",
     "Express 5 promises",
     research,
-    true,
+    false,
     new AbortController().signal,
   );
+  assert.equal(research.records.length, 1);
   const extracted = await c.agent.researchAction(
     id,
     "extract_docs",

@@ -1,7 +1,8 @@
+import { ObservationContext } from "./observations";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { forwardModelResponse, ModelRequestError } from "./model-transport";
+import { requestModelWithRetry, ModelRequestError } from "./model-transport";
 import type { Store } from "../store";
 import { now, projectRoot, problem } from "../paths";
 import { hash, revision, sourceFiles, harnessRevision } from "../snapshots";
@@ -197,9 +198,15 @@ export class AgentService {
         .catch((error) =>
           this.finish(
             id,
-            signal.aborted ? "Cancelled" : "Failed",
             signal.aborted
-              ? "Investigation cancelled or duration limit reached. No candidate was executed."
+              ? signal.reason === "duration"
+                ? "Timed out"
+                : "Cancelled"
+              : "Failed",
+            signal.aborted
+              ? signal.reason === "duration"
+                ? "Investigation reached its 12-minute limit. No candidate was executed."
+                : "Engineer cancelled the investigation. No candidate was executed."
               : error instanceof ModelRequestError
                 ? error.message
                 : "Investigation failed. No successful reproduction or fix is inferred. Review recorded actions and setup.",
@@ -223,7 +230,7 @@ export class AgentService {
   cancel(id: string) {
     const run = this.get(id);
     if (!run.finished_at && this.activeId === id) {
-      this.abort?.abort();
+      this.abort?.abort("engineer");
       this.event(id, "Cancelling", "Cancellation requested by Local engineer.");
     }
     return this.get(id);
@@ -290,9 +297,13 @@ export class AgentService {
       .run(baseRevision, id);
     const app = new IsolatedApp(status.isolation.image!);
     const research = new ResearchSession();
+    const observationContext = new ObservationContext();
     const modelName = "twodb-model-" + randomUUID();
     let model: JsonProcess | undefined;
-    const timer = setTimeout(() => this.abort?.abort(), limits.durationMs);
+    const timer = setTimeout(
+      () => this.abort?.abort("duration"),
+      limits.durationMs,
+    );
     const stop = () => {
       void docker(["rm", "-f", modelName, app.name, app.browserName]).catch(
         () => {},
@@ -352,7 +363,7 @@ export class AgentService {
         this.store.db
           .prepare("UPDATE investigations SET evidence=? WHERE id=?")
           .run(JSON.stringify(run.evidence), id);
-        return { ...observations, evidence };
+        return observationContext.browser({ ...observations, evidence });
       };
       result = saveBrowser(result);
       model = new JsonProcess([
@@ -377,30 +388,49 @@ export class AgentService {
         )
           throw new Error("Model transport budget exceeded");
         requests.add(message.id);
-        this.event(id, "Model request", "The SDK submitted a request to the protected API broker.");
+        this.event(
+          id,
+          "Model request",
+          "The SDK submitted a request to the protected API broker.",
+        );
         const body = Buffer.from(message.body, "base64").toString("utf8"),
           parsed = JSON.parse(body);
         if (parsed.model !== status.model)
           throw new Error("Model selection changed");
-        const response = await fetch("https://api.openai.com/v1/responses", {
-          method: "POST",
-          headers: {
-            Authorization: "Bearer " + process.env.TWO_DB_OPENAI_API_KEY,
-            "Content-Type": "application/json",
-          },
-          body,
+        await requestModelWithRetry(
+          () =>
+            fetch("https://api.openai.com/v1/responses", {
+              method: "POST",
+              headers: {
+                Authorization: "Bearer " + process.env.TWO_DB_OPENAI_API_KEY,
+                "Content-Type": "application/json",
+              },
+              body,
+              signal: AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
+              redirect: "error",
+            }),
+          message.id,
+          (message) => model!.send(message),
           signal,
-          redirect: "error",
-        });
-        if (response.ok)
-          this.event(id, "Model response", "The API opened a response stream; completion and any streamed errors are checked separately.", { httpStatus: response.status });
-        await forwardModelResponse(response, message.id, message => model!.send(message));
+          (attempt, delayMs, rateLimits) =>
+            this.event(
+              id,
+              "Waiting for model capacity",
+              `OpenAI rate limit: retry ${attempt} of 2 in ${Math.ceil(delayMs / 1000)} seconds. Browser actions are not repeated.`,
+              { attempt, delayMs, rateLimits },
+            ),
+        );
+        this.event(
+          id,
+          "Model response",
+          "The model response completed successfully; waiting for the SDK to return its action.",
+        );
       };
       const turn = (prompt: string) =>
         new Promise<any>((resolve, reject) => {
           const timer = setTimeout(
             () => reject(new Error("Model turn timed out")),
-            130_000,
+            250_000,
           );
           const fail = (e: Error) => {
             clearTimeout(timer);
@@ -411,10 +441,18 @@ export class AgentService {
             if (message.type === "model-request") {
               void proxy(message).catch((error) => {
                 if (error instanceof ModelRequestError) {
-                  this.event(id, "Model request failed", error.message, { httpStatus: error.httpStatus, code: error.code });
+                  this.event(id, "Model request failed", error.message, {
+                    httpStatus: error.httpStatus,
+                    rateLimits: error.rateLimits,
+                    code: error.code,
+                  });
                   fail(error);
                 } else {
-                  this.event(id, "Model request failed", "Model broker request did not complete. Check any preceding API error; otherwise this may be a network or transport failure.");
+                  this.event(
+                    id,
+                    "Model request failed",
+                    "Model broker request did not complete. Check any preceding API error; otherwise this may be a network or transport failure.",
+                  );
                   fail(new Error("Model service request failed"));
                 }
               });
@@ -432,9 +470,28 @@ export class AgentService {
                 .run(JSON.stringify(run.usage), id);
             }
             if (message.type === "failed") {
-              const allowed = ["worker_initialization", "sdk_stream", "sdk_forbidden", "sdk_unauthorized", "sdk_quota_or_rate_limit", "sdk_schema", "sdk_unsupported_option", "sdk_transport", "native_tool_refused", "invalid_action_json", "empty_model_output"];
-              const category = allowed.includes(message.category) ? message.category : "unclassified";
-              this.event(id, "Worker failed", "The SDK worker did not return an action. No successful model output is inferred.", { category });
+              const allowed = [
+                "worker_initialization",
+                "sdk_stream",
+                "sdk_forbidden",
+                "sdk_unauthorized",
+                "sdk_quota_or_rate_limit",
+                "sdk_schema",
+                "sdk_unsupported_option",
+                "sdk_transport",
+                "native_tool_refused",
+                "invalid_action_json",
+                "empty_model_output",
+              ];
+              const category = allowed.includes(message.category)
+                ? message.category
+                : "unclassified";
+              this.event(
+                id,
+                "Worker failed",
+                "The SDK worker did not return an action. No successful model output is inferred.",
+                { category },
+              );
               fail(new Error("SDK worker failed"));
             }
             if (message.type === "action") {
@@ -456,7 +513,18 @@ export class AgentService {
         reproduced = false;
       for (let step = 0; step < limits.actions; step++) {
         signal.throwIfAborted();
-        const action = parseAction(await turn(prompt));
+        let action;
+        try {
+          action = parseAction(await turn(prompt));
+        } catch (error) {
+          if (!signal.aborted && !(error instanceof ModelRequestError))
+            this.event(
+              id,
+              "Investigation action failed",
+              "The model worker stopped, timed out, or returned an invalid action. See the preceding worker category; no action was executed.",
+            );
+          throw error;
+        }
         signal.throwIfAborted();
         this.event(
           id,
@@ -482,7 +550,9 @@ export class AgentService {
             ].includes(action.action)
           ) {
             const observed = await app.browserAction(action);
-            result = observed.ok ? saveBrowser(observed) : observed;
+            result = observed.ok
+              ? saveBrowser(observed)
+              : observationContext.browser(observed);
           } else if (
             action.action === "search_docs" ||
             action.action === "extract_docs"
@@ -638,7 +708,9 @@ export class AgentService {
       requirements = JSON.stringify(discountRequirements),
       timestamp = now();
     this.store.db
-      .prepare("INSERT INTO proposals(id,ticket_id,kind,base_revision,candidate_revision,requirements,requirements_hash,harness_hash,diff,explanation,state,revision_number,current_approval,last_run,created_at,updated_at,investigation_origin) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+      .prepare(
+        "INSERT INTO proposals(id,ticket_id,kind,base_revision,candidate_revision,requirements,requirements_hash,harness_hash,diff,explanation,state,revision_number,current_approval,last_run,created_at,updated_at,investigation_origin) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      )
       .run(
         id,
         run.ticket_id,

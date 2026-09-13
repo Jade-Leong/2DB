@@ -1,5 +1,6 @@
 import { chromium } from "@playwright/test";
 import { createInterface } from "node:readline";
+import { observePage } from "./observation.mjs";
 const origin = "http://127.0.0.1:3001";
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({
@@ -18,6 +19,7 @@ context.on("page", (p) => {
   if (p !== page) void p.close();
 });
 const responses = [];
+let currentSelectors = new Set();
 const pending = new Set();
 let displayedCents = null,
   checkout = null,
@@ -59,32 +61,41 @@ for await (const line of createInterface({ input: process.stdin })) {
       await page.goto(origin);
       await page.getByLabel("Local-only demo account").selectOption(buyer);
     } else if (a.action === "open") {
+      const destination = new URL(a.target, origin);
       if (
-        !a.target.startsWith("/") ||
-        a.target.startsWith("//") ||
-        new URL(a.target, origin).origin !== origin
+        typeof a.target !== "string" ||
+        !(a.target.startsWith("/") || a.target.startsWith(origin + "/")) ||
+        destination.origin !== origin ||
+        destination.username ||
+        destination.password
       )
         throw new Error("Assigned marketplace only");
-      await page.goto(origin + a.target);
+      await page.goto(destination.href);
     } else if (["click", "fill", "select"].includes(a.action)) {
       const selector = a.target;
       if (
         typeof selector !== "string" ||
         selector.length > 300 ||
-        selector.includes(">>")
+        !currentSelectors.has(selector)
       )
-        throw new Error("Use a simple CSS selector");
-      const total = await page
-        .getByTestId("checkout-total")
-        .textContent()
-        .catch(() => null);
+        throw new Error(
+          "Use an exact selector from the latest browser observation",
+        );
+      const totalElement = page.getByTestId("checkout-total");
+      const total = (await totalElement.count())
+        ? await totalElement.textContent()
+        : null;
       if (total && /^\$\d+\.\d{2}$/.test(total.trim()))
         displayedCents = Math.round(Number(total.replace("$", "")) * 100);
       const element = page.locator(selector);
       if (a.action === "click") await element.click();
       if (a.action === "fill") await element.fill(a.value);
       if (a.action === "select") {
-        if (selector.includes("account") && a.value !== buyer)
+        if (
+          (await element.getAttribute("aria-label")) ===
+            "Local-only demo account" &&
+          a.value !== buyer
+        )
           throw new Error("Use the affected customer");
         await element.selectOption(a.value);
       }
@@ -113,45 +124,23 @@ for await (const line of createInterface({ input: process.stdin })) {
         buyer,
       };
     }
-    const elements = await page
-      .locator("a,button,input,select,textarea")
-      .evaluateAll((nodes) =>
-        nodes.map((n, i) => ({
-          selector: `${n.tagName.toLowerCase()}:nth-of-type(${
-            Array.from(n.parentElement.children)
-              .filter((e) => e.tagName === n.tagName)
-              .indexOf(n) + 1
-          })`,
-          id: n.id,
-          testId: n.getAttribute("data-testid"),
-          label: n.getAttribute("aria-label"),
-          text: n.textContent?.trim().slice(0, 160),
-          href: n.getAttribute("href"),
-          name: n.getAttribute("name"),
-          type: n.getAttribute("type"),
-          options:
-            n.tagName === "SELECT"
-              ? Array.from(n.options).map((o) => ({
-                  value: o.value,
-                  text: o.text,
-                }))
-              : undefined,
-        })),
-      );
+    const observation = await observePage(page);
+    currentSelectors = new Set(observation.elements.map((e) => e.selector));
     send({
       ok: true,
-      url: page.url(),
-      text: (await page.locator("body").innerText()).slice(0, 22000),
-      elements,
+      ...observation,
       responses,
       receipt,
       screenshot,
     });
   } catch {
+    const observation = await observePage(page).catch(() => ({ elements: [] }));
+    currentSelectors = new Set(observation.elements.map((e) => e.selector));
     send({
       ok: false,
+      ...observation,
       error:
-        "Browser action failed. Inspect the current page and choose an unambiguous CSS selector on the assigned marketplace.",
+        "Browser action failed or the selector is stale. Use an exact selector returned below; do not guess CSS or repeat a failed action unchanged.",
     });
   }
 }

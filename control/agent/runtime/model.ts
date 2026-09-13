@@ -117,7 +117,7 @@ input.on("line", async (line) => {
     }
     const { events } = await thread.runStreamed(message.prompt, {
       outputSchema: message.schema,
-      signal: AbortSignal.timeout(120_000),
+      signal: AbortSignal.timeout(240_000),
     });
     let final = "";
     failure = "sdk_stream";
@@ -135,7 +135,10 @@ input.on("line", async (line) => {
           [/unsupported|not supported/i, "sdk_unsupported_option"],
           [/stream|connection|connect/i, "sdk_transport"],
         ] as const) {
-          if (pattern.test(detail)) { failure = category; break; }
+          if (pattern.test(detail)) {
+            failure = category;
+            break;
+          }
         }
         throw new Error("SDK turn failed");
       }

@@ -31,6 +31,7 @@ async function api(url, data) {
   if (res.status === 401 && url !== "/login") {
       token = "";
       sessionStorage.removeItem("2db-engineer-session");
+      throw new Error("Your session has expired. Please sign in again.");
   }
   return readApiResponse(res);
 }

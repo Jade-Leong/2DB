@@ -6,6 +6,14 @@ For the hackathon, the Vercel site is only the frontend. Agent 1, Agent 2, Docke
 
 Open PowerShell in the repository root. Configure the Vercel origin before exposing the controller:
 
+The controller automatically loads a private, gitignored `.env` from the repository root. Because the GitHub integration executes in this local process, GitHub App variables configured only in Vercel are not visible to it. On a machine authorized for the Vercel project, pull the existing production values before starting the controller:
+
+```powershell
+npx.cmd vercel env pull .env --environment=production
+```
+
+Set `GITHUB_APP_PUBLIC_URL` in `.env` to the current public controller origin. With a Quick Tunnel, this is its current `https://<random>.trycloudflare.com` URL and must be updated whenever that URL changes. A named tunnel avoids that recurring change. The GitHub App callback URL must be the same origin followed by `/engineer-api/github/callback`.
+
 ```powershell
 $env:CONTROL_PUBLIC = "1"
 $env:CONTROL_ALLOWED_ORIGINS = "https://twodb-steel.vercel.app"

@@ -1,6 +1,11 @@
 import { createControl } from "./app";
 import { readMarketTickets, deleteMarketTicket } from "./market-tickets";
 import { loadGitHubConfig } from "./github";
+try {
+  process.loadEnvFile(".env");
+} catch (error) {
+  if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+}
 const port = Number(process.env.CONTROL_PORT ?? 3002);
 if (!Number.isInteger(port) || port < 1024 || port > 65535)
   throw new Error("CONTROL_PORT must be between 1024 and 65535.");

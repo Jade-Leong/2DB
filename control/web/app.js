@@ -157,7 +157,7 @@ ${
 function githubView() {
   if (!githubStatus) return `<section class="panel"><h2>GitHub</h2><p class="muted">Loading GitHub connection status…</p></section>`;
   if (!githubStatus.configured)
-    return `<section class="panel"><h2>GitHub</h2><p>The GitHub App integration is not configured on this server. Set <code>GITHUB_APP_ID</code>, <code>GITHUB_APP_SLUG</code>, <code>GITHUB_APP_CLIENT_ID</code>, <code>GITHUB_APP_CLIENT_SECRET</code>, <code>GITHUB_APP_PRIVATE_KEY</code>, and <code>GITHUB_TOKEN_KEY</code> in your environment, then restart.</p></section>`;
+    return `<section class="panel"><h2>GitHub</h2><p>The GitHub App integration is not configured in the local 2DB controller. Vercel environment variables do not reach the controller through Cloudflare. Add <code>GITHUB_APP_ID</code>, <code>GITHUB_APP_SLUG</code>, <code>GITHUB_APP_CLIENT_ID</code>, <code>GITHUB_APP_CLIENT_SECRET</code>, <code>GITHUB_APP_PRIVATE_KEY</code>, <code>GITHUB_TOKEN_KEY</code>, and <code>GITHUB_APP_PUBLIC_URL</code> to the controller's <code>.env</code>, then restart it.</p></section>`;
   if (!githubStatus.connected)
     return `<section class="panel"><h2>GitHub</h2><p>Connect a GitHub account so approved proposals can be pushed as pull requests to a repository you have installed the <b>2DB Bridge</b> app on.</p><div class="actions"><button data-action="github-connect" ${githubBusy ? "disabled" : ""}>${githubBusy ? "Preparing…" : "Connect GitHub →"}</button></div></section>`;
   const target = githubStatus.targetRepo;

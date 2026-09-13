@@ -354,9 +354,6 @@ test("deterministic synthetic agent proposal requires exact engineer approval; c
     "Synthetic authorization test, not a model discovery.",
     {
       likelyCause: "Test only",
-      sourceReferences: ["src/style.css"],
-      uncertainties: "This is synthetic evidence, not a live run.",
-      suggestedVerification: "Run the independent contract.",
       researchSummary:
         "Synthetic documentation used as background, not proof of the discount fix.",
       citations: [
@@ -373,6 +370,8 @@ test("deterministic synthetic agent proposal requires exact engineer approval; c
   );
   assert.equal(p.agentMetadata.research.citations[0].id, doc.id);
   assert.equal(p.agentMetadata.research.records.length, 2);
+  assert.deepEqual(p.agentMetadata.conclusion.sourceReferences, ["src/style.css"]);
+  assert.deepEqual(p.agentMetadata.conclusion.missingFields, ["uncertainties", "suggestedVerification", "sourceReferences"]);
   assert.equal(p.author, "Agent-generated");
   assert.equal(p.state, "Awaiting engineer approval");
   await assert.rejects(c.runner.start(p.id), /approval/);

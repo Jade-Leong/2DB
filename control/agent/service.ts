@@ -24,6 +24,7 @@ import {
   parseAction,
   mismatch,
   conclusion,
+  finishDetails,
   behavior,
 } from "./policy";
 import {
@@ -622,7 +623,7 @@ export class AgentService {
               candidate,
               base,
               action.summary,
-              JSON.parse(action.value),
+              finishDetails(action.value),
             );
             this.finish(
               id,
@@ -688,7 +689,6 @@ export class AgentService {
       .filter((e: any) => e.details?.origin === "tavily-reference")
       .map((e: any) => e.details);
     const researchReport = researchConclusion(details, researchRecords);
-    const report = conclusion(details, candidate);
     const dir = path.join(this.store.dataDir, "investigations", runId);
     if (
       candidate !== path.join(dir, "candidate") ||
@@ -704,6 +704,10 @@ export class AgentService {
     const diff = actualDiff(base, candidate);
     if (!diff.diff || diff.base !== run.base_revision)
       problem("Source integrity failed.");
+    const changedFiles = sourceFiles(base).filter(name =>
+      !readFileSync(path.join(base, name)).equals(readFileSync(path.join(candidate, name))),
+    );
+    const report = conclusion(details, candidate, changedFiles);
     const id = randomUUID(),
       requirements = JSON.stringify(discountRequirements),
       timestamp = now();

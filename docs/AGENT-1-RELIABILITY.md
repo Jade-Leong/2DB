@@ -33,3 +33,13 @@ The focused tests use synthetic OpenAI streams and a real local Chromium page. T
 Verification at handoff: TypeScript passed; all nine focused checks passed; the eleven non-UI Agent 1 checks passed. The existing dashboard test still expects the removed “Investigate with Agent 1”/Tavily setup controls and times out against the redesigned interface, including on the committed UI baseline. That older UI test needs alignment with the separate workspace redesign. No successful production model run is claimed for this update before the hosted worker is rebuilt and tested.
 
 Reference: https://developers.openai.com/api/docs/guides/rate-limits
+
+## Partial completion reports
+
+The first hosted run of `7b74e16` reproduced the $38.40 order / $48.00 payment mismatch with trusted browser evidence, then prepared an edit. It repeatedly failed completion-report validation and was cancelled by the deployment operator to stop the loop. No rate-limit recovery events were recorded in that run; no successful proposal or verified fix is claimed.
+
+Completion reports now accept omitted narrative fields for engineer review. Missing causes and uncertainties are explicitly marked as not provided, missing verification advice receives an engineer-approval reminder, and missing source references are derived from the actual changed files. Metadata records `missingFields`. The prompt documents the JSON structure in the finish action's `value`. Provided source references still must identify permitted existing application files, and supplied text remains bounded.
+
+This does not waive trusted reproduction, evidence integrity, source integrity, exact-revision approval, or independent verification. A partial report creates an unexecuted proposal awaiting engineer approval, never an automatically applied fix. Research citations retain their separate provenance checks.
+
+Additional regression command: `node --import tsx --test control/tests/finish-report.test.ts`.

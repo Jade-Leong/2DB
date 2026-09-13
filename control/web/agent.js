@@ -81,11 +81,11 @@ function researchRecordsView(records) {
     .join("");
 }
 function researchPanel() {
-  const check = researchStatus?.lastCheck;
   const records = (investigation?.events || [])
     .filter((e) => e.details?.origin === "tavily-reference")
     .map((e) => e.details);
-  return `<section class="panel research-panel"><div class="section-title"><div><span class="eyebrow">POWERED BY TAVILY · SEARCH + EXTRACT</span><h2>From uncertainty to a cited explanation.</h2></div>${badge(check ? (check.verified ? "Connection verified" : "Check failed") : "Not checked")}</div><p>Agent 1 can consult official documentation after reproducing a complaint, then explain how the sources support or challenge its proposed fix.</p><p class="small muted">${esc(researchStatus?.message || "Checking research configuration…")}</p><div class="actions"><button class="secondary" data-action="check-tavily" ${busy ? "disabled" : ""}>${busy ? "Working…" : "Test Tavily connection"}</button><span class="small muted">One public docs search and extraction. No customer data is sent by this check.</span></div>${check ? `<details ${!check.verified ? "open" : ""}><summary>${check.verified ? "Live connection check passed" : "Live connection check did not pass"} · ${date(check.at)}</summary><p class="small muted">${esc(check.purpose)}</p>${researchRecordsView(check.records)}</details>` : ""}${records.length ? `<details open><summary>This investigation's documentation research (${records.length} actions)</summary>${researchRecordsView(records)}</details>` : `<p class="small muted">No documentation research recorded for the selected investigation yet. A connection check does not establish a bug or a fix.</p>`}</section>`;
+  if (!records.length) return "";
+  return `<details class="research-panel"><summary>Research findings (${records.length})</summary>${researchRecordsView(records)}</details>`;
 }
 function researchCitationsView(research) {
   if (!research) return "";
@@ -111,7 +111,7 @@ function ticketAgentPanel(t) {
   const indicator = (running) => `<span class="agent-spinner ${running ? "is-running" : ""}" aria-hidden="true">${running ? "◌" : "·"}</span>`;
   return `<section class="ticket-agent-controls" aria-label="Agents for selected ticket">
     <div class="actions"><button data-action="investigate" data-id="${esc(t.id)}" ${busy || investigations.some((r) => !r.finished_at) || agentStatus?.state !== "Ready" ? "disabled" : ""}>Start Agent 1</button><span class="small muted">${active ? "Investigation in progress" : agentStatus?.state === "Ready" ? "Ready to investigate this ticket" : "Expand Agent 1 to review setup"}</span></div>
-    <details class="agent-disclosure" data-agent-detail="${esc(t.id)}:1"><summary>${indicator(active)}<strong>agent 1</strong> ${badge(run?.state || "Not started")}<span class="muted">Status & findings</span></summary><p class="agent-latest" aria-live="polite">${esc(run?.message || "Start an investigation to see findings here.")}</p>${agentView(t)}</details>
+    <details class="agent-disclosure" data-agent-detail="${esc(t.id)}:1"><summary>${indicator(active)}<strong>agent 1</strong> ${badge(run?.state || "Not started")}<span class="muted">Status & findings</span></summary><p class="agent-latest" aria-live="polite">${esc(run?.message || "Start an investigation to see findings here.")}</p>${agentView(t)}${researchPanel()}</details>
     <details class="agent-disclosure" data-agent-detail="${esc(t.id)}:2"><summary>${indicator(verifying)}<strong>agent 2</strong> ${badge(p?.runs?.[0]?.state || p?.state || "Waiting for proposal")}<span class="muted">Review, verify & findings</span></summary>${p ? proposalView(p) : '<p class="muted">Agent 1 needs to produce a proposal first. Review and approve the change here, then start Agent 2.</p>'}</details>
   </section>`;
 }

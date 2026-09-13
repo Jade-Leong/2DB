@@ -2,6 +2,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import OpenAI from "openai";
+import { diagnosticFetch } from "./agent/openai-diagnostics";
 import type { Store } from "./store";
 import type { Runner } from "./runner";
 import { now, problem } from "./paths";
@@ -346,9 +348,10 @@ export class Agent2Service {
         baseline.browserAction({ action: "init", buyer: ticket.customer_id }),
         candidate.browserAction({ action: "init", buyer: ticket.customer_id }),
       ]);
-      const { Agent, run, tool, setDefaultOpenAIKey, setTracingDisabled } =
+      const { Agent, run, tool, setDefaultOpenAIKey, setDefaultOpenAIClient, setTracingDisabled } =
         await import("@openai/agents");
       setDefaultOpenAIKey(process.env.TWO_DB_OPENAI_API_KEY!);
+      setDefaultOpenAIClient(new OpenAI({ apiKey: process.env.TWO_DB_OPENAI_API_KEY!, fetch: diagnosticFetch(status.model) }));
       setTracingDisabled(true);
       const browserTool = tool({
         name: "browser_action",

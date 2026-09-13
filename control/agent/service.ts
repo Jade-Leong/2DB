@@ -1,4 +1,5 @@
 import { ObservationContext } from "./observations";
+import { diagnosticFetch, pausedMessage } from "./openai-diagnostics";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -422,7 +423,7 @@ export class AgentService {
           (requestSignal) =>
             requestModelWithRetry(
               () =>
-                fetch("https://api.openai.com/v1/responses", {
+                diagnosticFetch(status.model)("https://api.openai.com/v1/responses", {
                   method: "POST",
                   headers: {
                     Authorization:
@@ -440,7 +441,7 @@ export class AgentService {
                 this.event(
                   id,
                   "Waiting for model capacity",
-                  `OpenAI rate limit: retry ${attempt} of 2 in ${Math.ceil(delayMs / 1000)} seconds. Browser actions are not repeated.`,
+                  pausedMessage,
                   { attempt, delayMs, rateLimits },
                 ),
             ),

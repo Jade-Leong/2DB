@@ -4,13 +4,13 @@
 
 Hosting is **incomplete**. Marketplace preview: https://twodb-steel.vercel.app/; dashboard preview: https://twodb-steel.vercel.app/control/. Both public pages returned HTTP 200, but the public API health check returned HTTP 503. Seven direct sandbox checks passed, including a purchase retaining the intentional discount mismatch, buyer isolation, engineer authentication, and persistence after restart. Those direct checks do not prove the public API works.
 
-The temporary hosted backend uses a Vercel persistent Sandbox and Drive with separate hosted SQLite data. Local customer data is preserved. Live Agent 1 has not completed a successful investigation.
+The temporary hosted backend uses a Vercel persistent Sandbox and Drive. It selects the server-side Supabase adapter when `SUPABASE_DB_URL` is configured in Vercel; otherwise it retains separate hosted SQLite data. Local customer data is preserved. Live Agent 1 has not completed a successful investigation.
 
 ### Supabase handoff
 
-Fetched GitHub origin/main at `88ed481` and inspected it in a separate detached checkout at `deployment/data/supabase-source`, preserving local work. The handoff prepares private schema `two_db` in project `jcynpdtvuqrppkkgegbt`; it leaves the application using SQLite and does not configure Supabase Storage or Auth.
+Fetched and merged the Supabase implementation through origin/main at `617ed32`. It prepares private schema `two_db` in project `jcynpdtvuqrppkkgegbt` and adds a server-side PostgreSQL persistence adapter for the marketplace and ticket inbox. Automated tests continue to use disposable SQLite.
 
-The other engineer will privately configure the Sensitive Vercel Production variable `SUPABASE_DB_URL` with the Session pooler URI. Never put its password or URI in Git, chat, tickets, or logs. Application database, storage, and engineer sign-in integration still needs implementation and validation after that configuration.
+The other engineer will privately configure the Sensitive Vercel Production variable `SUPABASE_DB_URL` with the Session pooler URI. Never put its password or URI in Git, chat, tickets, or logs. Uploaded files still use the server filesystem and engineer sign-in still uses the controller's demo key; Supabase Storage and Auth are not implemented. The hosted database path still needs end-to-end validation after the connection variable is available.
 
 ### Deploy on commit — not enabled yet
 

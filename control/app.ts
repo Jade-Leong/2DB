@@ -13,18 +13,26 @@ import { Runner } from "./runner";
 import { controlRoot, defaultData, problem } from "./paths";
 import type { FixtureKind } from "./snapshots";
 import { AgentService, setupStatus } from "./agent/service";
+import { checkTavily, tavilyStatus } from "./agent/tavily";
 
 export function createControl(
   options: {
     dataDir?: string;
     privateDir?: string;
     ticketSource?: string;
+    remoteTickets?: () => Promise<any[]>;
     agentStatus?: typeof setupStatus;
+    researchCheck?: typeof checkTavily;
   } = {},
 ) {
   const store = new Store(options.dataDir ?? defaultData, options.ticketSource),
     runner = new Runner(store);
+  store.remoteTickets = options.remoteTickets;
   const agent = new AgentService(store, options.agentStatus);
+  let researchCheckRunning = false;
+  let researchCheckAt = 0;
+  let researchCheckResult: Awaited<ReturnType<typeof checkTavily>> | null =
+    null;
   let statusCache:
     { at: number; value: Awaited<ReturnType<typeof setupStatus>> } | undefined;
   const privateDir = options.privateDir ?? path.join(controlRoot, "private");
@@ -104,7 +112,22 @@ export function createControl(
   app.get("/engineer-api/session", (_req, res) =>
     res.json({ reviewer: "Local engineer", active: runner.active }),
   );
-  app.get("/engineer-api/inbox", (_req, res) => res.json(store.inbox()));
+  app.get("/engineer-api/inbox", async (_req, res) => res.json(await store.inboxAsync()));
+  app.get("/engineer-api/research/status", (_req, res) =>
+    res.json({ ...tavilyStatus(), lastCheck: researchCheckResult }),
+  );
+  app.post("/engineer-api/research/check", async (_req, res) => {
+    if (researchCheckRunning || Date.now() - researchCheckAt < 60_000)
+      problem("Wait one minute between Tavily connection checks.", 429);
+    researchCheckRunning = true;
+    researchCheckAt = Date.now();
+    try {
+      researchCheckResult = await (options.researchCheck ?? checkTavily)();
+      res.json(researchCheckResult);
+    } finally {
+      researchCheckRunning = false;
+    }
+  });
   app.get("/engineer-api/agent/status", async (_req, res) => {
     if (!statusCache || Date.now() - statusCache.at > 30_000)
       statusCache = { at: Date.now(), value: await agent.statusCheck() };
@@ -136,15 +159,16 @@ export function createControl(
   app.get("/engineer-api/proposals/:id", (req, res) =>
     res.json(store.detail(String(req.params.id))),
   );
-  app.post("/engineer-api/tickets/:id/import", (req, res) =>
-    res.json(store.importTicket(String(req.params.id))),
+  app.post("/engineer-api/tickets/:id/import", async (req, res) =>
+    res.json(await store.receiveTicket(String(req.params.id))),
   );
-  app.post("/engineer-api/proposals", (req, res) =>
-    res
+  app.post("/engineer-api/proposals", async (req, res) => {
+    await store.receiveTicket(String(req.body.ticketId));
+    return res
       .status(201)
       .json(
         store.create(String(req.body.ticketId), req.body.kind as FixtureKind),
-      ),
+      ); },
   );
   app.post("/engineer-api/proposals/:id/revision", (req, res) =>
     res.json(store.change(String(req.params.id), req.body.kind)),

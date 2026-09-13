@@ -27,6 +27,20 @@ import {
   parseAction,
 } from "../agent/policy";
 import { hardening, dockerEnv } from "../agent/docker";
+import { ResearchSession, checkTavily } from "../agent/tavily";
+const syntheticDocsFetch = (async () =>
+  Response.json({
+    request_id: "synthetic-ui-check",
+    usage: { credits: 1 },
+    results: [
+      {
+        url: "https://expressjs.com/en/guide/error-handling.html",
+        title: "Synthetic documentation <img src=x onerror=alert(1)>",
+        content: "Express 5 handles rejected promises automatically.",
+        raw_content: "Express 5 handles rejected promises automatically.",
+      },
+    ],
+  })) as typeof fetch;
 
 const root = path.join(controlRoot, "data/agent-tests", randomUUID());
 mkdirSync(root, { recursive: true });
@@ -71,6 +85,7 @@ const c = createControl({
   privateDir: path.join(root, "private"),
   ticketSource: source,
   agentStatus: async () => blocked,
+  researchCheck: () => checkTavily(syntheticDocsFetch),
 });
 const server = c.app.listen(0, "127.0.0.1");
 await new Promise<void>((r) => server.once("listening", r));
@@ -106,6 +121,8 @@ test("customer headers cannot start, view, cancel, or approve investigations", a
   for (const [route, body] of [
     ["/tickets/complaint/investigate", {}],
     ["/investigations", undefined],
+    ["/research/status", undefined],
+    ["/research/check", {}],
     ["/investigations/missing/cancel", {}],
     ["/proposals/missing/approve", { revision: "fake", role: "engineer" }],
   ] as const)
@@ -273,23 +290,61 @@ test("deterministic synthetic agent proposal requires exact engineer approval; c
     path.join(evidenceDir, screenshot),
     Buffer.from("89504e470d0a1a0a", "hex"),
   );
-  c.store.db
-    .prepare("UPDATE investigations SET evidence=? WHERE id=?")
-    .run(
-      JSON.stringify([
-        {
-          ...observation,
-          sha256: hash(readFileSync(path.join(evidenceDir, record))),
-        },
-      ]),
-      id,
-    );
+  c.store.db.prepare("UPDATE investigations SET evidence=? WHERE id=?").run(
+    JSON.stringify([
+      {
+        ...observation,
+        sha256: hash(readFileSync(path.join(evidenceDir, record))),
+      },
+    ]),
+    id,
+  );
   editSource(
     candidate,
     "src/style.css",
     readSource(candidate, "src/style.css") + "\n",
     true,
   );
+  const research = new ResearchSession(syntheticDocsFetch);
+  await assert.rejects(
+    c.agent.researchAction(
+      id,
+      "search_docs",
+      "express",
+      "Express 5 promises",
+      research,
+      false,
+      new AbortController().signal,
+    ),
+    /Reproduce/,
+  );
+  assert.equal(research.records.length, 0);
+  const found = await c.agent.researchAction(
+    id,
+    "search_docs",
+    "express",
+    "Express 5 promises",
+    research,
+    true,
+    new AbortController().signal,
+  );
+  const extracted = await c.agent.researchAction(
+    id,
+    "extract_docs",
+    found.sources[0].id,
+    "",
+    research,
+    true,
+    new AbortController().signal,
+  );
+  assert.equal(
+    c.agent
+      .get(id)
+      .events.filter((e: any) => e.details?.origin === "tavily-reference")
+      .length,
+    2,
+  );
+  const doc = extracted.sources[0];
   const p = c.agent.createProposal(
     id,
     candidate,
@@ -300,8 +355,22 @@ test("deterministic synthetic agent proposal requires exact engineer approval; c
       sourceReferences: ["src/style.css"],
       uncertainties: "This is synthetic evidence, not a live run.",
       suggestedVerification: "Run the independent contract.",
+      researchSummary:
+        "Synthetic documentation used as background, not proof of the discount fix.",
+      citations: [
+        {
+          sourceId: doc.id,
+          sha256: doc.sha256,
+          quote: "Express 5 handles rejected promises",
+          relationship: "background",
+          relevance:
+            "Synthetic test; this reference does not establish the discount cause.",
+        },
+      ],
     },
   );
+  assert.equal(p.agentMetadata.research.citations[0].id, doc.id);
+  assert.equal(p.agentMetadata.research.records.length, 2);
   assert.equal(p.author, "Agent-generated");
   assert.equal(p.state, "Awaiting engineer approval");
   await assert.rejects(c.runner.start(p.id), /approval/);
@@ -347,6 +416,7 @@ test("OS-runner policy has no host network, privileges, secret environment, or D
   const previous = process.env.TWO_DB_OPENAI_API_KEY;
   process.env.TWO_DB_OPENAI_API_KEY = "synthetic-test-secret";
   assert.equal(dockerEnv().TWO_DB_OPENAI_API_KEY, undefined);
+  assert.equal(dockerEnv().TWO_DB_TAVILY_API_KEY, undefined);
   if (previous === undefined) delete process.env.TWO_DB_OPENAI_API_KEY;
   else process.env.TWO_DB_OPENAI_API_KEY = previous;
 });
@@ -390,6 +460,26 @@ test("dashboard displays honest setup state and separate developer fixtures", as
       (await page.locator("body").innerText()).includes(
         "DEVELOPER-AUTHORED DEMO AREA",
       ),
+    );
+    await page.getByRole("button", { name: "Test Tavily connection" }).click();
+    await page
+      .getByText(
+        "Tavily Search and Extract verified. This check did not run an investigation.",
+        { exact: true },
+      )
+      .waitFor();
+    await page.getByText(/Live connection check passed/).click();
+    assert.equal(await page.locator(".research-source img").count(), 0);
+    assert.equal(
+      (await page
+        .locator('.research-source a[href^="https://expressjs.com/"]')
+        .count()) >= 2,
+      true,
+    );
+    assert.equal((await request("/research/check", {})).status, 429);
+    assert.equal(
+      (await request("/research/status")).body.lastCheck.verified,
+      true,
     );
     assert.deepEqual(errors, []);
     const artifacts = path.join(controlRoot, "test-results/agent");

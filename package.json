@@ -24,7 +24,11 @@
     "control:agent:test": "node --import tsx --test --test-concurrency=1 control/tests/agent.test.ts",
     "test:support": "node --import tsx --test verification/voice-api.test.ts && playwright test --project=support",
     "supabase:check": "node scripts/supabase.mjs check",
-    "supabase:setup": "node scripts/supabase.mjs setup"
+    "supabase:setup": "node scripts/supabase.mjs setup",
+    "control:research:test": "node --import tsx --test control/tests/tavily.test.ts",
+    "control:research:check": "tsx control/agent/research-check.ts",
+    "supabase:import": "tsx scripts/import-market.ts",
+    "supabase:test": "tsx verification/supabase-live.ts"
   },
   "dependencies": {
     "@elevenlabs/client": "^1.25.0",

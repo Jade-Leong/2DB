@@ -6,7 +6,8 @@ import { writeFileSync, existsSync } from "node:fs";
 import { loadEnvFile } from "node:process";
 import { voiceRouter } from "./voice.js";
 import path from "node:path";
-import { db, uploadsDir, root } from "./db.js";
+import { db, uploadsDir, root } from "./storage.js";
+import { useSupabase } from "./postgres.js";
 
 if (process.env.LOOP_TEST !== "1" && existsSync(path.join(root, ".env")))
   loadEnvFile(path.join(root, ".env"));
@@ -33,9 +34,9 @@ type Product = {
 function fail(message: string, status = 400): never {
   throw Object.assign(new Error(message), { status });
 }
-function identity(req: express.Request, role?: string): Account {
+async function identity(req: express.Request, role?: string): Promise<Account> {
   const id = req.header("X-Demo-Account");
-  const user = db.prepare("SELECT * FROM accounts WHERE id=?").get(id ?? "") as
+  const user = await db.prepare("SELECT * FROM accounts WHERE id=?").get(id ?? "") as
     Account | undefined;
   if (!user) return fail("Select a local demo account.", 401);
   if (role && user.role !== role)
@@ -43,7 +44,7 @@ function identity(req: express.Request, role?: string): Account {
   return user;
 }
 const productQuery = `SELECT p.*, a.name AS seller_name, a.shop FROM products p JOIN accounts a ON a.id=p.seller_id`;
-function quote(body: any) {
+async function quote(body: any) {
   if (
     !Array.isArray(body.items) ||
     !body.items.length ||
@@ -51,7 +52,7 @@ function quote(body: any) {
   )
     fail("Add between 1 and 30 different items.");
   const seen = new Set<string>();
-  const items = body.items.map((item: any) => {
+  const items = await Promise.all(body.items.map(async (item: any) => {
     if (
       typeof item.productId !== "string" ||
       seen.has(item.productId) ||
@@ -61,15 +62,15 @@ function quote(body: any) {
     )
       fail("Invalid cart quantity or duplicate item.");
     seen.add(item.productId);
-    const product = db
+    const product = await db
       .prepare("SELECT * FROM products WHERE id=?")
       .get(item.productId) as Product | undefined;
     if (!product) return fail("An item is no longer available.");
     return { ...product, quantity: item.quantity as number };
-  }) as (Product & { quantity: number })[];
+  })) as (Product & { quantity: number })[];
   const code =
     typeof body.code === "string" ? body.code.trim().toUpperCase() : "";
-  const discount = db
+  const discount = await db
     .prepare("SELECT percent FROM discounts WHERE code=? AND active=1")
     .get(code) as { percent: number } | undefined;
   const subtotal_cents = items.reduce(
@@ -92,55 +93,57 @@ function quote(body: any) {
     code_valid: !!discount,
   };
 }
-app.get("/api/health", (_req, res) => res.json({ ok: true }));
-app.get("/api/accounts", (_req, res) =>
-  res.json(db.prepare("SELECT * FROM accounts").all()),
+app.get("/api/health", async (_req, res) => {
+  await db.prepare("SELECT 1").get();
+  res.json({ ok: true, database: useSupabase ? "supabase" : "sqlite" });
+});
+app.get("/api/accounts", async (_req, res) =>
+  res.json(await db.prepare("SELECT * FROM accounts").all()),
 );
-app.get("/api/products", (_req, res) =>
-  res.json(db.prepare(productQuery).all()),
+app.get("/api/products", async (_req, res) =>
+  res.json(await db.prepare(productQuery).all()),
 );
-app.get("/api/products/:id", (req, res) => {
-  const p = db
+app.get("/api/products/:id", async (req, res) => {
+  const p = await db
     .prepare(`${productQuery} WHERE p.id=?`)
     .get(String(req.params.id));
   if (!p) fail("Listing not found.", 404);
   res.json(p);
 });
-app.post("/api/quote", (req, res) => {
-  identity(req, "buyer");
-  res.json(quote(req.body));
+app.post("/api/quote", async (req, res) => {
+  await identity(req, "buyer");
+  res.json(await quote(req.body));
 });
-function orderDetail(id: string, buyerId: string) {
-  const order = db
+async function orderDetail(id: string, buyerId: string) {
+  const order = await db
     .prepare("SELECT * FROM orders WHERE id=? AND buyer_id=?")
     .get(id, buyerId);
   if (!order) return fail("Order not found.", 404);
   return {
     ...order,
-    items: db.prepare("SELECT * FROM order_items WHERE order_id=?").all(id),
-    payment: db.prepare("SELECT * FROM payments WHERE order_id=?").get(id),
+    items: await db.prepare("SELECT * FROM order_items WHERE order_id=?").all(id),
+    payment: await db.prepare("SELECT * FROM payments WHERE order_id=?").get(id),
   };
 }
-app.post("/api/checkout", (req, res) => {
-  const user = identity(req, "buyer");
+app.post("/api/checkout", async (req, res) => {
+  const user = await identity(req, "buyer");
   const key = req.body.requestKey;
   if (typeof key !== "string" || key.length < 8 || key.length > 100)
     fail("A checkout request key is required.");
-  const previous = db
+  const result = await db.transaction(`${user.id}:${key}`, async () => {
+  const previous = await db
     .prepare(
       "SELECT order_id FROM checkout_requests WHERE buyer_id=? AND request_key=?",
     )
     .get(user.id, key) as { order_id: string } | undefined;
   if (previous) {
-    res.json(orderDetail(previous.order_id, user.id));
-    return;
+    return { status: 200, order: await orderDetail(previous.order_id, user.id) };
   }
-  const q = quote(req.body),
+  const q = await quote(req.body),
     id = randomUUID(),
     now = new Date().toISOString();
-  db.exec("BEGIN IMMEDIATE");
-  try {
-    db.prepare("INSERT INTO orders VALUES (?,?,?,?,?,?,?,?)").run(
+
+    await db.prepare("INSERT INTO orders VALUES (?,?,?,?,?,?,?,?)").run(
       id,
       user.id,
       "paid",
@@ -150,53 +153,51 @@ app.post("/api/checkout", (req, res) => {
       q.code,
       now,
     );
-    const insert = db.prepare(
+    const insert = await db.prepare(
       "INSERT INTO order_items(order_id,product_id,title,quantity,unit_cents) VALUES(?,?,?,?,?)",
     );
     for (const p of q.items)
-      insert.run(id, p.id, p.title, p.quantity, p.price_cents);
-    db.prepare("INSERT INTO payments VALUES (?,?,?,?,?)").run(
+      await insert.run(id, p.id, p.title, p.quantity, p.price_cents);
+    await db.prepare("INSERT INTO payments VALUES (?,?,?,?,?)").run(
       randomUUID(),
       id,
       q.subtotal_cents,
       "succeeded",
       now,
     );
-    db.prepare("INSERT INTO checkout_requests VALUES (?,?,?)").run(
+    await db.prepare("INSERT INTO checkout_requests VALUES (?,?,?)").run(
       user.id,
       key,
       id,
     );
-    db.exec("COMMIT");
-  } catch (e) {
-    db.exec("ROLLBACK");
-    throw e;
-  }
-  res.status(201).json(orderDetail(id, user.id));
+
+  return { status: 201, order: await orderDetail(id, user.id) };
+  });
+  res.status(result.status).json(result.order);
 });
-app.get("/api/orders", (req, res) => {
-  const user = identity(req, "buyer");
+app.get("/api/orders", async (req, res) => {
+  const user = await identity(req, "buyer");
   res.json(
-    db
+    await db
       .prepare(
         "SELECT * FROM orders WHERE buyer_id=? AND status IN ('shipped','delivered') ORDER BY created_at DESC",
       )
       .all(user.id),
   );
 });
-app.get("/api/orders/:id", (req, res) =>
-  res.json(orderDetail(String(req.params.id), identity(req, "buyer").id)),
+app.get("/api/orders/:id", async (req, res) =>
+  res.json(await orderDetail(String(req.params.id), (await identity(req, "buyer")).id)),
 );
-app.get("/api/listings", (req, res) =>
+app.get("/api/listings", async (req, res) =>
   res.json(
-    db
+    await db
       .prepare(`${productQuery} WHERE p.seller_id=?`)
-      .all(identity(req, "seller").id),
+      .all((await identity(req, "seller")).id),
   ),
 );
-function owned(req: express.Request) {
-  const user = identity(req, "seller");
-  const p = db
+async function owned(req: express.Request) {
+  const user = await identity(req, "seller");
+  const p = await db
     .prepare("SELECT * FROM products WHERE id=? AND seller_id=?")
     .get(String(req.params.id), user.id) as Product | undefined;
   if (!p) return fail("Listing not found.", 404);
@@ -226,26 +227,26 @@ function listing(body: any) {
     body.price_cents,
   ] as const;
 }
-app.post("/api/listings", (req, res) => {
-  const u = identity(req, "seller"),
+app.post("/api/listings", async (req, res) => {
+  const u = await identity(req, "seller"),
     values = listing(req.body),
     id = randomUUID();
-  db.prepare("INSERT INTO products VALUES(?,?,?,?,?,?,?,?)").run(
+  await db.prepare("INSERT INTO products VALUES(?,?,?,?,?,?,?,?)").run(
     id,
     u.id,
     ...values,
     null,
     1,
   );
-  res.status(201).json(db.prepare(`${productQuery} WHERE p.id=?`).get(id));
+  res.status(201).json(await db.prepare(`${productQuery} WHERE p.id=?`).get(id));
 });
-app.put("/api/listings/:id", (req, res) => {
-  const p = owned(req),
+app.put("/api/listings/:id", async (req, res) => {
+  const p = await owned(req),
     values = listing(req.body);
-  db.prepare(
+  await db.prepare(
     "UPDATE products SET title=?,description=?,category=?,price_cents=? WHERE id=? AND seller_id=?",
   ).run(...values, p.id, p.seller_id);
-  res.json(db.prepare(`${productQuery} WHERE p.id=?`).get(p.id));
+  res.json(await db.prepare(`${productQuery} WHERE p.id=?`).get(p.id));
 });
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -253,9 +254,9 @@ const upload = multer({
 });
 app.post(
   "/api/listings/:id/photo",
-  (req, res, next) => {
+  async (req, res, next) => {
     try {
-      owned(req);
+      await owned(req);
       next();
     } catch (e) {
       next(e);
@@ -263,7 +264,7 @@ app.post(
   },
   upload.single("photo"),
   async (req, res) => {
-    const p = owned(req),
+    const p = await owned(req),
       file = req.file;
     if (!file) return fail("Choose a PNG or JPEG file.");
     const png = file.buffer
@@ -301,8 +302,8 @@ app.post(
   },
 );
 app.use("/api/support/voice", voiceRouter({ account: identity }));
-app.post("/api/support", (req, res) => {
-  const u = identity(req);
+app.post("/api/support", async (req, res) => {
+  const u = await identity(req);
   const { subject, message } = req.body;
   if (
     typeof subject !== "string" ||
@@ -314,7 +315,7 @@ app.post("/api/support", (req, res) => {
   )
     fail("Enter a subject and message within the length limits.");
   const id = randomUUID();
-  db.prepare("INSERT INTO support_tickets VALUES (?,?,?,?,?)").run(
+  await db.prepare("INSERT INTO support_tickets VALUES (?,?,?,?,?)").run(
     id,
     u.id,
     subject.trim(),
@@ -324,7 +325,7 @@ app.post("/api/support", (req, res) => {
   res.status(201).json({ id });
 });
 app.use(express.static(path.join(root, "dist")));
-app.get("/{*path}", (req, res) => {
+app.get("/{*path}", async (req, res) => {
   if (req.path.startsWith("/api/")) {
     res.status(404).json({ error: "Not found." });
     return;
@@ -340,7 +341,7 @@ app.use(
   ) => {
     const status =
       err instanceof multer.MulterError ? 400 : (err.status ?? 500);
-    if (status === 500) console.error(err);
+    if (status === 500) console.error("Marketplace request failed.");
     res.status(status).json({
       error:
         status === 500
@@ -351,7 +352,7 @@ app.use(
     });
   },
 );
-app.listen(3001, "127.0.0.1", () =>
+app.listen(Number(process.env.PORT ?? 3001), "127.0.0.1", () =>
   console.log(
     "Loop Market API: http://127.0.0.1:3001 (local demo identities only)",
   ),

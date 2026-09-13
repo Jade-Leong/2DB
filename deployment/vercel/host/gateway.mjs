@@ -8,12 +8,13 @@ const equals=(value)=> typeof value==='string' && Buffer.byteLength(value)===Buf
 let controller,market,boot;
 const cleanEnv={PATH:process.env.PATH,HOME:process.env.HOME,NODE_EXTRA_CA_CERTS:process.env.NODE_EXTRA_CA_CERTS};
 async function start(config) {
-  if (!market || market.exitCode!==null) market=spawn(process.execPath,['--import','./cloud/market-port.mjs','--import','tsx','server/index.ts'],{cwd:root,env:cleanEnv,stdio:'ignore'});
+  const databaseEnv=config.supabaseDbUrl?{MARKET_DATABASE:'supabase',SUPABASE_DB_URL:config.supabaseDbUrl}:{};
+  if (!market || market.exitCode!==null) market=spawn(process.execPath,['--import','./cloud/market-port.mjs','--import','tsx','server/index.ts'],{cwd:root,env:{...cleanEnv,...databaseEnv},stdio:'ignore'});
   if (!controller || controller.exitCode!==null) {
     mkdirSync(root+'/control/private',{recursive:true});
     const file=root+'/control/private/engineer-key.json';
     if(!existsSync(file))writeFileSync(file,JSON.stringify({key:config.engineerKey}),{mode:0o600});
-    controller=spawn(process.execPath,['--import','tsx','control/index.ts'],{cwd:root,env:{...cleanEnv,TWO_DB_OPENAI_API_KEY:config.apiKey,TWO_DB_AGENT_MODEL:config.model},stdio:'ignore'});
+    controller=spawn(process.execPath,['--import','tsx','control/index.ts'],{cwd:root,env:{...cleanEnv,...databaseEnv,TWO_DB_OPENAI_API_KEY:config.apiKey,TWO_DB_AGENT_MODEL:config.model},stdio:'ignore'});
   }
   for(let i=0;i<100;i++) {
     const ready=await Promise.all([3003,3002].map(p=>fetch(`http://127.0.0.1:${p}/${p===3003?'api/health':'health'}`).then(r=>r.ok).catch(()=>false)));
@@ -28,7 +29,7 @@ const server=http.createServer(async(req,res)=>{
     try {
       let body='';for await(const chunk of req){body+=chunk;if(body.length>12000)throw Error('Too large');}
       const config=JSON.parse(body);
-      if(typeof config.engineerKey!=='string'||config.engineerKey.length<40||typeof config.apiKey!=='string'||typeof config.model!=='string')throw Error('Configuration missing');
+      if(typeof config.engineerKey!=='string'||config.engineerKey.length<40||typeof config.apiKey!=='string'||typeof config.model!=='string'||typeof config.supabaseDbUrl!=='string')throw Error('Configuration missing');
       if(!boot)boot=start(config).finally(()=>{boot=undefined;});
       await boot;res.writeHead(200,{'content-type':'application/json'}).end('{"ok":true}');
     }catch {res.writeHead(503).end('Backend setup incomplete');}return;

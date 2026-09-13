@@ -18,7 +18,7 @@ async function backend() {
   catch { throw new HostedBackendError('gateway-start'); }
   const origin=sandbox.domain(8080);
   let response;
-  try { response=await fetch(origin+'/__bootstrap',{method:'POST',headers:{'content-type':'application/json','x-twodb-gateway':process.env.TWO_DB_CLOUD_GATEWAY_KEY},body:JSON.stringify({apiKey:process.env.TWO_DB_OPENAI_API_KEY||'',model:process.env.TWO_DB_AGENT_MODEL||'',engineerKey:process.env.TWO_DB_CLOUD_ENGINEER_KEY}),signal:AbortSignal.timeout(120000)}); }
+  try { response=await fetch(origin+'/__bootstrap',{method:'POST',headers:{'content-type':'application/json','x-twodb-gateway':process.env.TWO_DB_CLOUD_GATEWAY_KEY},body:JSON.stringify({apiKey:process.env.TWO_DB_OPENAI_API_KEY||'',model:process.env.TWO_DB_AGENT_MODEL||'',engineerKey:process.env.TWO_DB_CLOUD_ENGINEER_KEY,supabaseDbUrl:process.env.SUPABASE_DB_URL||''}),signal:AbortSignal.timeout(120000)}); }
   catch { throw new HostedBackendError('bootstrap-fetch'); }
   if(!response.ok)throw new HostedBackendError('bootstrap-response');
   cached={origin,at:Date.now()};

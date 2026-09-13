@@ -4,7 +4,7 @@
   "buildCommand": "npm run vercel-build",
   "outputDirectory": "deployment/vercel/public",
   "functions": {
-    "deployment/vercel/api/index.mjs": {
+    "api/index.mjs": {
       "maxDuration": 300
     }
   },
@@ -19,19 +19,19 @@
     },
     {
       "source": "/api/:path*",
-      "destination": "/deployment/vercel/api/index"
+      "destination": "/api/index"
     },
     {
       "source": "/engineer-api/:path*",
-      "destination": "/deployment/vercel/api/index"
+      "destination": "/api/index"
     },
     {
       "source": "/auth-api/:path*",
-      "destination": "/deployment/vercel/api/index"
+      "destination": "/api/index"
     },
     {
       "source": "/uploads/:path*",
-      "destination": "/deployment/vercel/api/index"
+      "destination": "/api/index"
     }
   ]
 }

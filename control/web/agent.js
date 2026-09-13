@@ -48,7 +48,7 @@ function agentView(t) {
             .join("")}</details>`
         : ""
     }
-  </section>${scriptedAgent1View(t)}`;
+  </section>`;
 }
 
 function scriptedAgent1View(t) {
@@ -101,4 +101,17 @@ function ticketAgentActivity(t) {
     { name: "agent 2", active: secondRunning, state: secondRunning ? proposal.state : proposal?.runs?.[0]?.state || proposal?.state || "Not started" },
   ];
   return `<span class="ticket-agents" aria-label="Ticket agent activity">${states.map((agent) => `<span class="ticket-agent"><span class="agent-spinner ${agent.active ? "is-running" : ""}" aria-hidden="true">${agent.active ? "◌" : "·"}</span><span>${agent.name} <span class="muted">${esc(agent.state)}</span></span></span>`).join("")}</span>`;
+}
+
+function ticketAgentPanel(t) {
+  const run = investigation?.ticket_id === t.id ? investigation : null;
+  const active = Boolean(run && !run.finished_at);
+  const p = selected?.ticket_id === t.id ? selected : null;
+  const verifying = ["Verification running", "Live Agent 2 running"].includes(p?.state);
+  const indicator = (running) => `<span class="agent-spinner ${running ? "is-running" : ""}" aria-hidden="true">${running ? "◌" : "·"}</span>`;
+  return `<section class="ticket-agent-controls" aria-label="Agents for selected ticket">
+    <div class="actions"><button data-action="investigate" data-id="${esc(t.id)}" ${busy || investigations.some((r) => !r.finished_at) || agentStatus?.state !== "Ready" ? "disabled" : ""}>Start Agent 1</button><span class="small muted">${active ? "Investigation in progress" : agentStatus?.state === "Ready" ? "Ready to investigate this ticket" : "Expand Agent 1 to review setup"}</span></div>
+    <details class="agent-disclosure" data-agent-detail="${esc(t.id)}:1"><summary>${indicator(active)}<strong>agent 1</strong> ${badge(run?.state || "Not started")}<span class="muted">Status & findings</span></summary><p class="agent-latest" aria-live="polite">${esc(run?.message || "Start an investigation to see findings here.")}</p>${agentView(t)}</details>
+    <details class="agent-disclosure" data-agent-detail="${esc(t.id)}:2"><summary>${indicator(verifying)}<strong>agent 2</strong> ${badge(p?.runs?.[0]?.state || p?.state || "Waiting for proposal")}<span class="muted">Review, verify & findings</span></summary>${p ? proposalView(p) : '<p class="muted">Agent 1 needs to produce a proposal first. Review and approve the change here, then start Agent 2.</p>'}</details>
+  </section>`;
 }

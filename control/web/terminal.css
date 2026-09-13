@@ -215,3 +215,11 @@ footer { color: var(--muted); border-color: var(--line); padding: 24px 0; flex-w
 .workspace-research { margin: 16px 0; }
 @keyframes agent-turn { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .agent-spinner.is-running { animation: none; } }
+
+.agent-disclosure { border-top: 1px solid var(--line, #333); padding: 16px 0; }
+.agent-disclosure > summary { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; cursor: pointer; }
+.agent-disclosure > summary::before { content: "▸"; color: var(--muted); }
+.agent-disclosure[open] > summary::before { content: "▾"; }
+.agent-disclosure > summary:hover { color: var(--ink); }
+.agent-latest { margin: 16px 0; }
+.ticket-agent-controls > .actions { margin: 0 0 20px; }

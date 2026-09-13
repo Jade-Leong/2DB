@@ -9,9 +9,10 @@ const equals=(value)=> typeof value==='string' && Buffer.byteLength(value)===Buf
 let controller,market,boot;
 const cleanEnv={PATH:process.env.PATH,HOME:process.env.HOME,NODE_EXTRA_CA_CERTS:process.env.NODE_EXTRA_CA_CERTS};
 async function start(config) {
-  const databaseEnv=config.supabaseDbUrl?{MARKET_DATABASE:'supabase',SUPABASE_DB_URL:config.supabaseDbUrl}:{};
+  const databaseEnv=config.supabaseDbUrl?{MARKET_DATABASE:'supabase',SUPABASE_DB_URL:config.supabaseDbUrl,SUPABASE_DB_CA_FILE:'cloud/supabase-ca.crt'}:{};
   const accountEnv=config.supabaseUrl&&config.supabasePublishableKey?{SUPABASE_URL:config.supabaseUrl,SUPABASE_PUBLISHABLE_KEY:config.supabasePublishableKey}:{};
-  if (!market || market.exitCode!==null) market=spawn(process.execPath,['--import','./cloud/market-port.mjs','--import','tsx','server/index.ts'],{cwd:root,env:{...cleanEnv,...databaseEnv},stdio:'ignore'});
+  const voiceEnv={ELEVENLABS_API_KEY:config.elevenLabsApiKey||'',ELEVENLABS_AGENT_ID:config.elevenLabsAgentId||''};
+  if (!market || market.exitCode!==null) market=spawn(process.execPath,['--import','./cloud/market-port.mjs','--import','tsx','server/index.ts'],{cwd:root,env:{...cleanEnv,...databaseEnv,...voiceEnv},stdio:'ignore'});
   if (!controller || controller.exitCode!==null) {
     mkdirSync(root+'/control/private',{recursive:true});
     const file=root+'/control/private/engineer-key.json';

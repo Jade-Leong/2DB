@@ -1,6 +1,8 @@
 # Hosted deployment readiness
 
-## Current status — September 12, 2026
+For the September 13 deployment, configured variable names, CA configuration, release commands, validation, and remaining limitations, read [the current engineer handoff](../docs/ENGINEER-HANDOFF.md). The notes below describe earlier checkpoints and are retained as history.
+
+## Historical status — September 12, 2026
 
 Hosting is **incomplete**. Marketplace preview: https://twodb-steel.vercel.app/; dashboard preview: https://twodb-steel.vercel.app/control/. Both public pages returned HTTP 200, but the public API health check returned HTTP 503. Seven direct sandbox checks passed, including a purchase retaining the intentional discount mismatch, buyer isolation, engineer authentication, and persistence after restart. Those direct checks do not prove the public API works.
 

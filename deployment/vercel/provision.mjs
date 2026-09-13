@@ -3,7 +3,7 @@ import {readFileSync,readdirSync,lstatSync,mkdirSync,writeFileSync} from 'node:f
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
-import {ensureDocker} from './runtime.mjs';
+import {ensureDocker,stopDocker} from './runtime.mjs';
 const project=path.resolve(fileURLToPath(new URL('../..',import.meta.url)));
 const destination='/home/vercel-sandbox/twodb';
 const list=[];
@@ -28,6 +28,7 @@ try{
   const drive=await Drive.getOrCreate({name:'twodb-application-data'});
   await sandbox.runCommand('true');
   await sandbox.update({ports:[8080],timeout:1800000,snapshotExpiration:0,keepLastSnapshots:{count:1},mounts:{'/persistent':drive},networkPolicy:'allow-all'});
+  await stopDocker(sandbox);
   await sandbox.stop();
   await sandbox.runCommand('true');
   await sandbox.runCommand('mkdir',['-p',destination]);
@@ -49,4 +50,4 @@ try{
   report.status='prepared';
   await sandbox.updateNetworkPolicy({allow:['api.openai.com']});
 }catch(error){report.status='blocked';report.error=String(error.message);process.exitCode=1;}
-finally{await sandbox.stop().catch(()=>{});report.finishedAt=new Date().toISOString();writeFileSync('data/provision.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));}
+finally{await stopDocker(sandbox).catch(()=>{report.status='blocked';report.error='Docker shutdown failed before snapshot';process.exitCode=1;});await sandbox.stop().catch(()=>{});report.finishedAt=new Date().toISOString();writeFileSync('data/provision.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));}

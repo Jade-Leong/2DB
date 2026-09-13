@@ -6,3 +6,10 @@ export async function ensureDocker(sandbox) {
   const ready=await sandbox.runCommand({cmd:'sh',args:['-c','for i in $(seq 1 30); do if docker info >/dev/null 2>&1; then chmod 666 /var/run/docker.sock; exit 0; fi; sleep 1; done; exit 1'],sudo:true});
   if(ready.exitCode!==0)throw Error('Hosted Docker startup failed');
 }
+
+// Stop daemon processes before taking a filesystem snapshot. Restoring their
+// stale sockets can make docker info pass while container execution times out.
+export async function stopDocker(sandbox) {
+  const result=await sandbox.runCommand({cmd:'sh',args:['-c','pkill -TERM -x dockerd || true; pkill -TERM -x containerd || true; for i in $(seq 1 15); do if ! pgrep -x dockerd >/dev/null && ! pgrep -x containerd >/dev/null; then exit 0; fi; sleep 1; done; exit 1'],sudo:true});
+  if(result.exitCode!==0)throw Error('Hosted Docker shutdown did not finish before snapshot');
+}

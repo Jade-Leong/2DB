@@ -57,8 +57,12 @@ export function decrypt(config: GitHubConfig, ciphertext: string): string {
   return Buffer.concat([decipher.update(data), decipher.final()]).toString("utf8");
 }
 
-export function installUrl(config: GitHubConfig, state: string): string {
-  return `https://github.com/apps/${encodeURIComponent(config.slug)}/installations/new?state=${encodeURIComponent(state)}`;
+export function authorizationUrl(config: GitHubConfig, state: string): string {
+  return `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(config.clientId)}&state=${encodeURIComponent(state)}`;
+}
+
+export function installUrl(config: GitHubConfig): string {
+  return `https://github.com/apps/${encodeURIComponent(config.slug)}/installations/new`;
 }
 
 export function safeCompareState(a: string, b: string): boolean {

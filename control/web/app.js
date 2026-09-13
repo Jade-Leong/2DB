@@ -344,7 +344,7 @@ root.addEventListener("click", async (event) => {
       const popup = window.open("about:blank", "2db-github-install", "width=720,height=820");
       githubBusy = true; render();
       try {
-        const { url } = await api("/github/install-url", {});
+        const { url } = await api(action === "github-connect" ? "/github/connect-url" : "/github/install-url", {});
         // Some embedded browsers block every popup. Continue in the current tab there.
         if (popup) popup.location.href = url;
         else { window.location.href = url; return; }

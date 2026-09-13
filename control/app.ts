@@ -19,6 +19,7 @@ import { checkTavily, tavilyStatus } from "./agent/tavily";
 import { createAccountAuth, mountAccountRoutes, type AccountAuth, type AccountIdentity } from "./accounts";
 import {
   type GitHubConfig,
+  authorizationUrl,
   installUrl,
   safeCompareState,
   exchangeOAuthCode,
@@ -288,7 +289,7 @@ export function createControl(
       targetRepo: github?.targetRepo ?? null,
     });
   });
-  app.post("/engineer-api/github/install-url", (_req, res) => {
+  app.post("/engineer-api/github/connect-url", (_req, res) => {
     if (!github) problem("GitHub App integration is not configured on this server.", 503);
     pruneInstalls();
     const state = randomBytes(24).toString("base64url");
@@ -296,7 +297,11 @@ export function createControl(
       reviewer: res.locals.reviewer as string,
       expiresAt: Date.now() + 10 * 60 * 1000,
     });
-    res.json({ url: installUrl(github, state) });
+    res.json({ url: authorizationUrl(github, state) });
+  });
+  app.post("/engineer-api/github/install-url", (_req, res) => {
+    if (!github) problem("GitHub App integration is not configured on this server.", 503);
+    res.json({ url: installUrl(github) });
   });
   app.get("/engineer-api/github/callback", async (req, res) => {
     if (!github) { res.status(503).send("GitHub App integration is not configured."); return; }
@@ -307,8 +312,8 @@ export function createControl(
     const pending = state && [...pendingInstalls.entries()].find(([k]) => safeCompareState(k, state));
     if (!pending) { res.status(400).send("Install session expired or invalid. Return to 2DB and try again."); return; }
     pendingInstalls.delete(pending[0]);
-    if (!code || !Number.isInteger(installationId) || installationId <= 0) {
-      res.status(400).send("GitHub callback is missing code or installation_id.");
+    if (!code) {
+      res.status(400).send("GitHub callback is missing its authorization code.");
       return;
     }
     try {
@@ -342,7 +347,7 @@ p { color: #b3b3b3; margin: 10px 0; }
 p strong { color: #eceeec; font-weight: 500; }
 kbd { font: inherit; color: #eceeec; background: #2a2a2a; border: 1px solid #333; border-radius: 3px; padding: 1px 6px; }
 .muted { color: #7d7d7d; font-size: 12px; margin-top: 18px; }
-</style><div class="card"><span class="badge">Connected</span><h1>2DB Bridge is linked</h1><p>Signed in as <strong>${escapeHtml(user.login)}</strong> · installation <strong>#${installationId}</strong>.</p><p>Close this tab and return to 2DB — the workspace picks up the connection automatically.</p><p class="muted">Tokens are stored encrypted at rest and never leave your local server.</p></div>`);
+</style><div class="card"><span class="badge">Connected</span><h1>2DB Bridge is linked</h1><p>Signed in as <strong>${escapeHtml(user.login)}</strong>${installationId > 0 ? ` · installation <strong>#${installationId}</strong>` : ""}.</p><p>Close this tab and return to 2DB — the workspace picks up the connection automatically.</p><p class="muted">Tokens are stored encrypted at rest and never leave your local server.</p></div>`);
     } catch (e: any) {
       res.status(502).send(`GitHub callback failed: ${e?.message ?? "unknown error"}`);
     }

@@ -595,9 +595,9 @@ export class AgentService {
             );
             result = { reproduced: true, evidence: e };
           } else if (["list", "read", "edit"].includes(action.action)) {
-            if (!reproduced)
+            if (action.action === "edit" && !reproduced)
               problem(
-                "Reproduce with browser evidence before inspecting or editing source.",
+                "Reproduce with browser evidence before editing source. Read-only list/read actions are available to help plan reproduction.",
               );
             if (action.action === "list")
               result = sourceFiles(candidate).filter(

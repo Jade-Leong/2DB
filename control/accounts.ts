@@ -18,9 +18,9 @@ export function createAccountAuth(
   const key = env.SUPABASE_PUBLISHABLE_KEY || "";
   const enabled = !!(origin && key && env.LOOP_TEST !== "1");
   async function call(route: string, body?: object, accessToken?: string) {
-    if (!enabled) problem("Account login is not configured yet. Local engineer access is available below.", 503);
+    if (!enabled) problem("Account sign-in is not configured yet. Local engineer access is available below.", 503);
     if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(origin))
-      problem("Account login configuration is invalid.", 503);
+      problem("Account sign-in configuration is invalid.", 503);
     let response: Response;
     try {
       response = await request(`${origin}/auth/v1${route}`, {
@@ -34,8 +34,8 @@ export function createAccountAuth(
     if (!response!.ok) {
       if (response!.status === 429) problem("Too many attempts. Please wait before trying again.", 429);
       if (result.code === "email_not_confirmed" || result.error_code === "email_not_confirmed")
-        problem("Confirm your email before logging in.", 401);
-      if (route.startsWith("/signup")) problem("We could not create the account. Check your details or try logging in.", 400);
+        problem("Confirm your email before signing in.", 401);
+      if (route.startsWith("/signup")) problem("We could not create the account. Check your details or try signing in.", 400);
       problem("Email or password is incorrect, or the account is unavailable.", 401);
     }
     return result;
@@ -47,13 +47,13 @@ export function createAccountAuth(
     },
     async login(email, password) {
       const session = await call("/token?grant_type=password", { email, password });
-      if (typeof session.access_token !== "string") problem("Login did not return a valid session.", 401);
+      if (typeof session.access_token !== "string") problem("Sign-in did not return a valid session.", 401);
       // Fetch the authoritative user; never authorize from browser claims or user_metadata.
       const user = await call("/user", undefined, session.access_token);
       if (!user.id || !user.email || !user.email_confirmed_at || user.is_anonymous)
-        problem("Confirm your email before logging in.", 401);
+        problem("Confirm your email before signing in.", 401);
       const expiresIn = Math.min(Number(session.expires_in) || 0, 3600);
-      if (expiresIn <= 0) problem("Your session expired. Please log in again.", 401);
+      if (expiresIn <= 0) problem("Your session expired. Please sign in again.", 401);
       return { reviewer: `${user.email} (${user.id})`, expiresIn, accessToken: session.access_token };
     },
     async logout(accessToken) { await call("/logout?scope=local", {}, accessToken); },
@@ -83,7 +83,7 @@ export function mountAccountRoutes(
       if (mode === "signup") {
         // Origin is the controller's validated loopback origin, never a browser-supplied redirect.
         await auth.signup(email, password, `http://127.0.0.1:${req.socket.localPort}/?auth=login`);
-        res.status(202).json({ message: "Check your email to confirm your account, then log in. If you already have an account, log in instead." });
+        res.status(202).json({ message: "Check your email to confirm your account, then sign in. If you already have an account, sign in instead." });
       } else {
         const identity = await auth.login(email, password);
         res.json({ token: issue(identity), reviewer: identity.reviewer, expiresIn: identity.expiresIn });

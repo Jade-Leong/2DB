@@ -86,7 +86,7 @@ test("Terminal account pages work on desktop and mobile with two content font si
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.goto(origin);
-    await page.getByRole("button", { name: "Log in →", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Sign in →", exact: true }).waitFor();
     await page.waitForFunction(() => !document.querySelector<HTMLButtonElement>('#account-form button')?.disabled);
     assert.equal(await page.locator('.typing-char').count(), 0);
     const sizes = await page.locator('.workspace').evaluate(el => [...new Set(Array.from(el.querySelectorAll('*')).filter(node => node.childNodes.length && Array.from(node.childNodes).some(child => child.nodeType === Node.TEXT_NODE && child.textContent?.trim()) && node.getBoundingClientRect().height > 0).map(node => getComputedStyle(node).fontSize))].sort());
@@ -102,7 +102,7 @@ test("Terminal account pages work on desktop and mobile with two content font si
     await page.getByRole("status").filter({ hasText: "Check your email" }).waitFor();
     await page.getByLabel("Email", { exact: true }).fill("engineer@example.test");
     await page.getByLabel("Password", { exact: true }).fill("a-valid-test-password");
-    await page.getByRole("button", { name: "Log in →", exact: true }).click();
+    await page.getByRole("button", { name: "Sign in →", exact: true }).click();
     await page.getByRole("heading", { name: "Ticket inbox" }).waitFor();
     assert.equal(new URL(page.url()).pathname, "/");
     await page.setViewportSize({ width: 390, height: 844 });

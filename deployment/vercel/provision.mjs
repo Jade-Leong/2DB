@@ -20,7 +20,7 @@ list.push({relative:'README.md',content:readFileSync(path.join(project,'INVESTIG
 for(const file of readdirSync('host'))list.push({relative:'cloud/'+file,content:readFileSync('host/'+file)});
 for(const item of list){
   if(item.relative==='control/web/index.html')item.content=Buffer.from(item.content.toString().replaceAll('href="/style.css"','href="/control/style.css"').replaceAll('href="/terminal.css"','href="/control/terminal.css"').replaceAll('src="/agent.js"','src="/control/agent.js"').replaceAll('src="/account.js"','src="/control/account.js"').replaceAll('src="/terminal-motion.js"','src="/control/terminal-motion.js"').replaceAll('src="/app.js"','src="/control/app.js"'));
-  if(item.relative==='control/web/app.js')item.content=Buffer.from(item.content.toString().replaceAll('http://127.0.0.1:5173','/').replaceAll('href="/"','href="/control/"').replaceAll('src="/logo-reference.png"','src="/control/logo-reference.png"').replaceAll('Local environment','Vercel-hosted demo'));
+  if(item.relative==='control/web/app.js')item.content=Buffer.from(item.content.toString().replaceAll('href="/"','href="/control/"').replaceAll('http://127.0.0.1:3001','/').replaceAll('src="/logo-reference.png"','src="/control/logo-reference.png"').replaceAll('Local environment','Vercel-hosted demo'));
 }
 const report={startedAt:new Date().toISOString(),files:list.length,sourceHash:createHash('sha256').update(JSON.stringify(list.map(f=>[f.relative,createHash('sha256').update(f.content).digest('hex')]))).digest('hex'),steps:[]};
 const sandbox=await Sandbox.get({name:'twodb-host-runtime'});

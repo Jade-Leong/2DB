@@ -12,6 +12,7 @@ export interface GitHubConfig {
   privateKey: string;
   publicUrl: string;
   tokenKey: Buffer;
+  targetRepo: { owner: string; repo: string } | null;
 }
 
 export function loadGitHubConfig(env: NodeJS.ProcessEnv = process.env): GitHubConfig | undefined {
@@ -26,7 +27,14 @@ export function loadGitHubConfig(env: NodeJS.ProcessEnv = process.env): GitHubCo
   const privateKey = privateKeyRaw.includes("\\n") ? privateKeyRaw.replace(/\\n/g, "\n") : privateKeyRaw;
   const tokenKey = Buffer.from(tokenKeyRaw, "base64url");
   if (tokenKey.length !== 32) return undefined;
-  return { appId, slug, clientId, clientSecret, privateKey, publicUrl: publicUrl.replace(/\/$/, ""), tokenKey };
+  const targetSpec = (env.PROPOSAL_TARGET_REPO ?? "").trim();
+  let targetRepo: { owner: string; repo: string } | null = null;
+  if (targetSpec) {
+    const [owner, repo] = targetSpec.split("/");
+    if (owner && repo && /^[A-Za-z0-9._-]{1,100}$/.test(owner) && /^[A-Za-z0-9._-]{1,100}$/.test(repo))
+      targetRepo = { owner, repo };
+  }
+  return { appId, slug, clientId, clientSecret, privateKey, publicUrl: publicUrl.replace(/\/$/, ""), tokenKey, targetRepo };
 }
 
 export function encrypt(config: GitHubConfig, plaintext: string): string {
@@ -102,6 +110,54 @@ export function installationOctokit(config: GitHubConfig, installationId: number
     userAgent: "2db-bridge/0.1",
   });
 }
+export function appOctokit(config: GitHubConfig): Octokit {
+  return new Octokit({
+    authStrategy: createAppAuth,
+    auth: { appId: config.appId, privateKey: config.privateKey },
+    userAgent: "2db-bridge/0.1",
+  });
+}
+
+// Enumerate every repo the user has push access to AND where 2DB Bridge is installed.
+// Installations don't have to be owned by this user — installations by anyone (org, other
+// collaborator) count as long as the user can push to the covered repo.
+export interface PushableRepo {
+  installationId: number;
+  account_login: string;
+  owner: string;
+  repo: string;
+  default_branch: string;
+}
+export async function listPushableRepos(config: GitHubConfig, userToken: string): Promise<PushableRepo[]> {
+  const appKit = appOctokit(config);
+  const userKit = userOctokit(userToken);
+  const installations = await appKit.paginate("GET /app/installations", { per_page: 100 });
+  const results: PushableRepo[] = [];
+  const seen = new Set<string>();
+  for (const install of installations) {
+    const installKit = installationOctokit(config, install.id);
+    const repos = await installKit.paginate("GET /installation/repositories", { per_page: 100 });
+    const accountLogin = (install.account && "login" in install.account ? install.account.login : "") as string;
+    for (const r of repos as any[]) {
+      const key = `${install.id}:${r.owner.login}/${r.name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      try {
+        const { data: userRepo } = await userKit.rest.repos.get({ owner: r.owner.login, repo: r.name });
+        if (userRepo.permissions?.push) {
+          results.push({
+            installationId: install.id,
+            account_login: accountLogin,
+            owner: r.owner.login,
+            repo: r.name,
+            default_branch: r.default_branch,
+          });
+        }
+      } catch { /* user has no visibility to this repo */ }
+    }
+  }
+  return results;
+}
 
 // Turn one file patch (from `diff`.parsePatch) into a new file blob.
 // Returns undefined for pure deletions (caller should mark path removed).
@@ -122,8 +178,8 @@ async function applyPatchToFile(kit: Octokit, owner: string, repo: string, ref: 
       original = "";
     }
   }
-  const patched = applyPatch(original, patch as any);
-  if (patched === false) problem(`Failed to apply patch to ${path}. The target repo may have diverged from the proposal base.`, 409);
+  const patched = applyPatch(original, patch as any, { fuzzFactor: 3 });
+  if (patched === false) problem(`Failed to apply patch to ${path} on the target repo. The file has drifted too far from the proposal's base. Re-run the agent on this ticket to regenerate the diff against current code, then retry the PR.`, 409);
   return { path, content: patched };
 }
 

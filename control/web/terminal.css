@@ -73,8 +73,12 @@ header nav .nav-link[aria-pressed="true"] { color: var(--ink); }
 .github-install-list button[aria-pressed="true"] { color: var(--ink); border-color: var(--agent-one); }
 .github-pr-list { list-style: none; padding: 0; margin: 0; }
 .github-pr-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 0; border-bottom: 1px solid #292929; flex-wrap: wrap; }
-.github-pr-row .actions { display: flex; gap: 8px; align-items: center; }
-.github-pr-row select { background: transparent; color: var(--ink); border: 1px solid #333; padding: 4px 6px; }
+.github-pr-row .actions { display: flex; gap: 8px; align-items: center; flex: 0 0 auto; }
+.github-pr-row select { background: transparent; color: var(--ink); border: 1px solid #333; padding: 4px 6px; max-width: 260px; }
+.github-pr-meta { min-width: 0; flex: 1 1 260px; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.github-pr-meta strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.github-pr-meta .muted { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.alert-inline { color: #d99b6b; }
 .engineer { display: flex; gap: 15px; }
 .terminal-hero { padding: 34px 0 44px; max-width: 760px; }
 .breadcrumb, .eyebrow { color: var(--muted); letter-spacing: 0; font-weight: 400; }

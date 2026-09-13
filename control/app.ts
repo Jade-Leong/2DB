@@ -23,8 +23,7 @@ import {
   safeCompareState,
   exchangeOAuthCode,
   fetchGitHubUser,
-  listUserInstallations,
-  listAccessibleRepos,
+  listPushableRepos,
   createPullRequestFromDiff,
   encrypt,
   decrypt,
@@ -153,6 +152,10 @@ export function createControl(
     res.json({ token, reviewer: "Local engineer", expiresInHours: 8 });
   });
   app.use("/engineer-api", (req, res, next) => {
+    // GitHub OAuth callback lands here via browser redirect from github.com with
+    // no Authorization header. Its CSRF defense is the `state` param verified in
+    // the route handler.
+    if (req.method === "GET" && req.path === "/github/callback") { next(); return; }
     const token = req.header("Authorization")?.replace(/^Bearer /, "");
     if (!token || !sessions.has(token) || sessions.get(token)!.expiresAt < Date.now())
       problem(
@@ -261,6 +264,7 @@ export function createControl(
       configured: !!github,
       connected: !!link,
       login: link?.github_login ?? null,
+      targetRepo: github?.targetRepo ?? null,
     });
   });
   app.post("/engineer-api/github/install-url", (_req, res) => {
@@ -298,7 +302,20 @@ export function createControl(
         refresh_token: oauth.refresh_token ? encrypt(github, oauth.refresh_token) : null,
       });
       res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.send(`<!doctype html><meta charset="utf-8"><title>Connected to GitHub</title><style>body{font:14px system-ui;padding:32px;max-width:520px;margin:0 auto}</style><h1 style="font-size:18px">Connected ✓</h1><p>2DB Bridge is connected to <b>${escapeHtml(user.login)}</b>, installation #${installationId}.</p><p>You can close this tab and return to 2DB — the workspace will pick up the connection automatically.</p>`);
+      res.send(`<!doctype html><meta charset="utf-8"><title>Connected to GitHub · 2DB Bridge</title><style>
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: #1a1a1a; color: #eceeec; font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.card { max-width: 480px; width: 100%; padding: 28px 30px; border: 1px solid #2f2f2f; border-radius: 6px; background: #212121; }
+.badge { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px; border: 1px solid #2f5f3a; border-radius: 999px; color: #9dd3b0; font-size: 12px; letter-spacing: 0.02em; text-transform: uppercase; }
+.badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #9dd3b0; }
+h1 { font-size: 20px; font-weight: 500; letter-spacing: -0.01em; margin: 14px 0 8px; }
+p { color: #b3b3b3; margin: 10px 0; }
+p strong { color: #eceeec; font-weight: 500; }
+kbd { font: inherit; color: #eceeec; background: #2a2a2a; border: 1px solid #333; border-radius: 3px; padding: 1px 6px; }
+.muted { color: #7d7d7d; font-size: 12px; margin-top: 18px; }
+</style><div class="card"><span class="badge">Connected</span><h1>2DB Bridge is linked</h1><p>Signed in as <strong>${escapeHtml(user.login)}</strong> · installation <strong>#${installationId}</strong>.</p><p>Close this tab and return to 2DB — the workspace picks up the connection automatically.</p><p class="muted">Tokens are stored encrypted at rest and never leave your local server.</p></div>`);
     } catch (e: any) {
       res.status(502).send(`GitHub callback failed: ${e?.message ?? "unknown error"}`);
     }
@@ -313,8 +330,14 @@ export function createControl(
     const link = store.githubLink(reviewer);
     if (!link) problem("Connect a GitHub account first.", 409);
     const userToken = decrypt(github, link.user_token);
-    const installations = await listUserInstallations(userToken);
-    res.json({ installations });
+    const repos = await listPushableRepos(github, userToken);
+    const byInstall = new Map<number, { id: number; account_login: string; repoCount: number }>();
+    for (const r of repos) {
+      const entry = byInstall.get(r.installationId) ?? { id: r.installationId, account_login: r.account_login, repoCount: 0 };
+      entry.repoCount++;
+      byInstall.set(r.installationId, entry);
+    }
+    res.json({ installations: [...byInstall.values()] });
   });
   app.get("/engineer-api/github/installations/:id/repos", async (req, res) => {
     if (!github) problem("GitHub App integration is not configured on this server.", 503);
@@ -324,9 +347,10 @@ export function createControl(
     const installationId = Number(req.params.id);
     if (!Number.isInteger(installationId) || installationId <= 0) problem("Invalid installation.", 400);
     const userToken = decrypt(github, link.user_token);
-    const installations = await listUserInstallations(userToken);
-    if (!installations.some((i) => i.id === installationId)) problem("You do not have access to this installation.", 403);
-    const repos = await listAccessibleRepos(userToken, installationId);
+    const all = await listPushableRepos(github, userToken);
+    const repos = all.filter((r) => r.installationId === installationId).map(({ owner, repo, default_branch }) => ({ owner, repo, default_branch }));
+    if (!repos.length && !all.some((r) => r.installationId === installationId))
+      problem("You do not have push access to any repository covered by this installation.", 403);
     res.json({ repos });
   });
   app.post("/engineer-api/proposals/:id/pr", async (req, res) => {
@@ -339,17 +363,25 @@ export function createControl(
     if (proposal.state !== "Approved") problem("Only approved proposals can be pushed as PRs.", 409);
     const existing = store.prForProposal(proposalId);
     if (existing) { res.json({ url: existing.pr_url, number: existing.pr_number, existed: true }); return; }
-    const installationId = Number(req.body.installationId);
-    const owner = String(req.body.owner ?? "").trim();
-    const repo = String(req.body.repo ?? "").trim();
-    const base = String(req.body.base ?? "main").trim() || "main";
-    if (!Number.isInteger(installationId) || installationId <= 0 || !/^[A-Za-z0-9._-]{1,100}$/.test(owner) || !/^[A-Za-z0-9._-]{1,100}$/.test(repo))
-      problem("owner, repo, and installationId are required.", 400);
     const userToken = decrypt(github, link.user_token);
-    const installations = await listUserInstallations(userToken);
-    if (!installations.some((i) => i.id === installationId)) problem("You do not have access to this installation.", 403);
-    const repos = await listAccessibleRepos(userToken, installationId);
-    if (!repos.some((r) => r.owner === owner && r.repo === repo)) problem("This installation does not cover the chosen repository.", 403);
+    const pushable = await listPushableRepos(github, userToken);
+    let owner: string, repo: string, installationId: number;
+    const base = String(req.body.base ?? "main").trim() || "main";
+    if (github.targetRepo) {
+      owner = github.targetRepo.owner;
+      repo = github.targetRepo.repo;
+      const match = pushable.find((r) => r.owner === owner && r.repo === repo);
+      if (!match) problem(`You need push access to ${owner}/${repo} with 2DB Bridge installed there. Fork it and install the app, or ask an owner to install it.`, 403);
+      installationId = match.installationId;
+    } else {
+      installationId = Number(req.body.installationId);
+      owner = String(req.body.owner ?? "").trim();
+      repo = String(req.body.repo ?? "").trim();
+      if (!Number.isInteger(installationId) || installationId <= 0 || !/^[A-Za-z0-9._-]{1,100}$/.test(owner) || !/^[A-Za-z0-9._-]{1,100}$/.test(repo))
+        problem("owner, repo, and installationId are required.", 400);
+      if (!pushable.some((r) => r.installationId === installationId && r.owner === owner && r.repo === repo))
+        problem("You do not have push access to this repository, or 2DB Bridge is not installed there.", 403);
+    }
     const ticket = store.db.prepare("SELECT subject, complaint FROM tickets WHERE id=?").get(proposal.ticket_id) as { subject: string; complaint: string } | undefined;
     const title = `[2DB] ${ticket?.subject ?? "Proposed change"}`;
     const branch = `2db/${proposalId.slice(0, 8)}-${Date.now().toString(36)}`;

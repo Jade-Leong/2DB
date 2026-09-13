@@ -15,7 +15,8 @@ let token = sessionStorage.getItem("2db-engineer-session") || "",
   githubRepos = {},
   githubSelectedInstall = null,
   githubBusy = false,
-  proposalPrs = {};
+  proposalPrs = {},
+  prCreating = {};
 const configuredBackend = window.__TWO_DB_API_BASE_URL__ || "";
 const backendBase = configuredBackend || (window.__TWO_DB_HOSTED__ ? null : location.origin);
 const backendUrl = (path) => {
@@ -128,22 +129,42 @@ function githubView() {
     return `<section class="panel"><h2>GitHub</h2><p>The GitHub App integration is not configured on this server. Set <code>GITHUB_APP_ID</code>, <code>GITHUB_APP_SLUG</code>, <code>GITHUB_APP_CLIENT_ID</code>, <code>GITHUB_APP_CLIENT_SECRET</code>, <code>GITHUB_APP_PRIVATE_KEY</code>, and <code>GITHUB_TOKEN_KEY</code> in your environment, then restart.</p></section>`;
   if (!githubStatus.connected)
     return `<section class="panel"><h2>GitHub</h2><p>Connect a GitHub account so approved proposals can be pushed as pull requests to a repository you have installed the <b>2DB Bridge</b> app on.</p><div class="actions"><button data-action="github-connect" ${githubBusy ? "disabled" : ""}>${githubBusy ? "Preparing…" : "Connect GitHub →"}</button></div></section>`;
+  const target = githubStatus.targetRepo;
   const installs = githubInstallations.map((i) => `<li><button class="text" data-action="github-select-install" data-id="${i.id}" aria-pressed="${githubSelectedInstall === i.id}">${esc(i.account_login)} · #${i.id}</button></li>`).join("");
   const repos = (githubSelectedInstall && githubRepos[githubSelectedInstall]) || [];
   const repoOptions = repos.map((r) => `<option value="${esc(r.owner)}/${esc(r.repo)}" data-base="${esc(r.default_branch)}">${esc(r.owner)}/${esc(r.repo)} (${esc(r.default_branch)})</option>`).join("");
+  // When a target repo is configured, every proposal ships against it — no repo choice.
+  const allPushable = Object.values(githubRepos).flat();
+  const targetPushable = target ? allPushable.some((r) => r.owner === target.owner && r.repo === target.repo) : false;
   const approved = proposals.filter((p) => p.state === "Approved");
   const approvedList = approved.length
     ? approved.map((p) => {
         const pr = proposalPrs[p.id];
-        const rowRepo = repos[0];
-        return `<li class="github-pr-row"><div><strong>${esc(p.ticket_id)}</strong><span class="muted"> · rev ${p.revision_number}</span></div>${pr
-          ? `<a href="${esc(pr.url)}" target="_blank" rel="noreferrer">PR #${pr.number} ↗</a>`
-          : repos.length
-            ? `<div class="actions"><select data-role="pr-repo" data-proposal="${esc(p.id)}">${repoOptions}</select><button data-action="create-pr" data-id="${esc(p.id)}" data-install="${githubSelectedInstall}" data-repo="${esc(rowRepo.owner)}/${esc(rowRepo.repo)}" data-base="${esc(rowRepo.default_branch)}">Create PR</button></div>`
-            : `<span class="muted">Choose an installation with a repository.</span>`}</li>`;
+        const t = imported.find((x) => x.id === p.ticket_id);
+        const subject = t?.subject || p.ticket_id;
+        const creating = !!prCreating[p.id];
+        let action;
+        if (pr) action = `<a href="${esc(pr.url)}" target="_blank" rel="noreferrer">PR #${pr.number} ↗</a>`;
+        else if (target) {
+          const label = creating ? `${spinner(true)} Creating PR…` : "Create PR";
+          const disabled = creating || !targetPushable;
+          action = `<div class="actions"><button data-action="create-pr" data-id="${esc(p.id)}" ${disabled ? "disabled" : ""} title="${targetPushable ? "" : "You need push access to " + target.owner + "/" + target.repo + " with 2DB Bridge installed there."}">${label}</button></div>`;
+        }
+        else if (repos.length) {
+          const rowRepo = repos[0];
+          action = `<div class="actions"><select data-role="pr-repo" data-proposal="${esc(p.id)}" ${creating ? "disabled" : ""}>${repoOptions}</select><button data-action="create-pr" data-id="${esc(p.id)}" data-install="${githubSelectedInstall}" data-repo="${esc(rowRepo.owner)}/${esc(rowRepo.repo)}" data-base="${esc(rowRepo.default_branch)}" ${creating ? "disabled" : ""}>${creating ? `${spinner(true)} Creating PR…` : "Create PR"}</button></div>`;
+        }
+        else action = `<span class="muted">Choose an installation with a repository.</span>`;
+        return `<li class="github-pr-row"><div class="github-pr-meta"><strong>${esc(subject)}</strong><span class="muted">${t?.customer_name ? esc(t.customer_name) + " · " : ""}rev ${p.revision_number} · ${esc(p.ticket_id.slice(0, 8))}</span></div>${action}</li>`;
       }).join("")
     : `<p class="muted">No approved proposals yet.</p>`;
-  return `<section class="panel"><h2>GitHub</h2><p>Connected as <b>${esc(githubStatus.login)}</b>. Approved proposals can be pushed as pull requests to any repository below.</p><div class="actions"><button class="secondary" data-action="github-disconnect" ${githubBusy ? "disabled" : ""}>Disconnect</button><button class="text" data-action="github-refresh" ${githubBusy ? "disabled" : ""}>Refresh installations</button></div><h3>Installations</h3>${githubInstallations.length ? `<ul class="github-install-list">${installs}</ul>` : `<p class="muted">No installations yet. <button class="text" data-action="github-install-more">Install 2DB Bridge on a repository →</button></p>`}<h3>Push approved proposals</h3><ul class="github-pr-list">${approvedList}</ul></section>`;
+  const targetLine = target
+    ? `<p class="muted">All approved proposals target <b>${esc(target.owner)}/${esc(target.repo)}</b>.${targetPushable ? "" : ` <span class="alert-inline">You do not have push access there via 2DB Bridge. Fork <b>${esc(target.owner)}/${esc(target.repo)}</b> and install the app on your fork, or ask an owner to install it on the source repo.</span>`}</p>`
+    : "";
+  const installsSection = target
+    ? "" // hide installations UI entirely when target is fixed
+    : `<h3>Installations</h3>${githubInstallations.length ? `<ul class="github-install-list">${installs}</ul>` : `<p class="muted">No installations yet. <button class="text" data-action="github-install-more">Install 2DB Bridge on a repository →</button></p>`}`;
+  return `<section class="panel"><h2>GitHub</h2><p>Connected as <b>${esc(githubStatus.login)}</b>.</p>${targetLine}<div class="actions"><button class="secondary" data-action="github-disconnect" ${githubBusy ? "disabled" : ""}>Disconnect</button><button class="text" data-action="github-refresh" ${githubBusy ? "disabled" : ""}>Refresh installations</button>${target && !targetPushable ? ` <button class="text" data-action="github-install-more">Install 2DB Bridge →</button>` : ""}</div>${installsSection}<h3>Push approved proposals</h3><ul class="github-pr-list">${approvedList}</ul></section>`;
 }
 async function refreshGithubStatus() {
   if (!token) return;
@@ -155,10 +176,16 @@ async function refreshGithubInstallations() {
   try {
     const { installations } = await api("/github/installations");
     githubInstallations = installations;
-    if (installations.length && !githubSelectedInstall) githubSelectedInstall = installations[0].id;
-    if (githubSelectedInstall && !githubRepos[githubSelectedInstall]) {
-      const { repos } = await api(`/github/installations/${githubSelectedInstall}/repos`);
-      githubRepos[githubSelectedInstall] = repos;
+    if (githubStatus.targetRepo) {
+      // Target repo is fixed — preload every install so we can tell whether the user has push access.
+      const results = await Promise.all(installations.map((i) => api(`/github/installations/${i.id}/repos`).then((r) => [i.id, r.repos]).catch(() => [i.id, []])));
+      githubRepos = Object.fromEntries(results);
+    } else {
+      if (installations.length && !githubSelectedInstall) githubSelectedInstall = installations[0].id;
+      if (githubSelectedInstall && !githubRepos[githubSelectedInstall]) {
+        const { repos } = await api(`/github/installations/${githubSelectedInstall}/repos`);
+        githubRepos[githubSelectedInstall] = repos;
+      }
     }
   } catch (e) { error = e.message; }
 }
@@ -336,19 +363,34 @@ root.addEventListener("click", async (event) => {
       return;
     }
     else if (action === "create-pr") {
-      const select = root.querySelector(`select[data-role="pr-repo"][data-proposal="${el.dataset.id}"]`);
-      const value = select?.value || el.dataset.repo;
-      const base = select?.selectedOptions?.[0]?.dataset?.base || el.dataset.base || "main";
-      const [owner, repo] = String(value || "").split("/");
-      const installationId = Number(el.dataset.install);
-      if (!owner || !repo || !installationId) return;
-      busy = true; render();
+      const proposalId = el.dataset.id;
+      if (prCreating[proposalId]) return;
+      const target = githubStatus?.targetRepo;
+      let body;
+      if (target) {
+        body = {};
+        notice = `Opening PR against ${target.owner}/${target.repo}…`;
+      } else {
+        const select = root.querySelector(`select[data-role="pr-repo"][data-proposal="${proposalId}"]`);
+        const opt = select?.selectedOptions?.[0];
+        const value = opt?.value || el.dataset.repo || "";
+        const installationId = Number(opt?.dataset?.install || el.dataset.install || 0);
+        const base = opt?.dataset?.base || el.dataset.base || "main";
+        const [owner, repo] = value.split("/");
+        if (!owner || !repo) { error = "Pick a repository from the dropdown first."; render(); return; }
+        if (!Number.isInteger(installationId) || installationId <= 0) { error = "This repository has no valid 2DB Bridge installation attached. Click Refresh installations."; render(); return; }
+        body = { owner, repo, installationId, base };
+        notice = `Opening PR against ${owner}/${repo}…`;
+      }
+      prCreating[proposalId] = true;
+      render();
       try {
-        const pr = await api(`/proposals/${el.dataset.id}/pr`, { owner, repo, installationId, base });
-        proposalPrs[el.dataset.id] = pr;
+        const pr = await api(`/proposals/${proposalId}/pr`, body);
+        proposalPrs[proposalId] = pr;
         notice = `Pull request opened: ${pr.url}`;
-      } catch (e) { error = e.message; }
-      busy = false; render();
+      } catch (e) { error = e.message; notice = ""; }
+      delete prCreating[proposalId];
+      render();
       return;
     }
     else if (action === "delete-ticket") {

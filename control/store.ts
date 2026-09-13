@@ -18,6 +18,7 @@ export class Store {
   db: DatabaseSync;
   fixtures: ReturnType<typeof initializeFixtures>;
   ticketSource: string;
+  remoteTickets?: () => Promise<any[]>;
   constructor(
     public dataDir: string,
     ticketSource = path.join(projectRoot, "data/local/market.sqlite"),
@@ -80,6 +81,18 @@ export class Store {
       source.close();
     }
   }
+  async inboxAsync(): Promise<any[]> {
+    if (!this.remoteTickets) return this.inbox();
+    return (await this.remoteTickets()).map(t => ({ ...t, related_reference: null, imported: !!this.db.prepare("SELECT id FROM tickets WHERE id=?").get(t.id) }));
+  }
+  async receiveTicket(id: string) {
+    if (!this.remoteTickets) return this.importTicket(id);
+    const existing = this.db.prepare("SELECT * FROM tickets WHERE id=?").get(id);
+    if (existing) return existing;
+    const t = (await this.inboxAsync()).find(t => t.id === id);
+    if (!t) problem("Submitted marketplace ticket not found.", 404);
+    return this.saveTicket(t);
+  }
   importTicket(id: string) {
     const existing = this.db
       .prepare("SELECT * FROM tickets WHERE id=?")
@@ -87,6 +100,12 @@ export class Store {
     if (existing) return existing;
     const t = this.inbox().find((t) => t.id === id);
     if (!t) problem("Submitted marketplace ticket not found.", 404);
+    return this.saveTicket(t);
+  }
+  private saveTicket(t: any) {
+    const existing = this.db.prepare("SELECT * FROM tickets WHERE id=?").get(t.id);
+    if (existing) return existing;
+    const id = t.id;
     this.db
       .prepare("INSERT INTO tickets VALUES(?,?,?,?,?,?,?,?,?)")
       .run(

@@ -2,7 +2,7 @@
   "src/main.tsx": "52dc407705add14974d6daa47cd6510a74a453911acf67b4a77694e225d761b8",
   "src/style.css": "33b875dea572e69c37c2a421bf6875023d2b612210d363efdc3322ae55be0afa",
   "server/db.ts": "d6364b7375a52e56c158c807cded54318e3004e45fbd1c4207f4839f13b4100e",
-  "server/index.ts": "3bcecdfa31cc610f64f29e7af14314f60a59a73496fea1ed961fbbcb341c98e1",
+  "server/index.ts": "bd7a0dbe207d84247ad95b33e7010bfc490ab3f0fed5398b96f6254b75dc15c9",
   "server/reset.ts": "8808a360c2b676563e145e83b1aaf5c0907c2153d0b97b54c950939d2a1a1221",
   "public/images/book.png": "03438cfa80287376774c26c16156c386e036bce7a71bc47045c9cebef100d0f3",
   "public/images/bowls.png": "467c26a2915b2dedb44bcce3056c1ad206650bbaf6321100a031d04fe4196e6b",
@@ -12,5 +12,7 @@
   "public/images/vase.png": "526c599682f6a739dd85584628aaca996ece59162881e83e862e80e2fa8c66c0",
   "src/support.tsx": "ac372dba585d62bab57d86a58ad401a977073df875d9751a26e5eaf2891aee82",
   "src/voice-client.ts": "c8afaa74874d9de0c12bcb9113c0999e3e31bac9584ef0f3e5fcc641bf023914",
-  "server/voice.ts": "96037c4fdd378458563281337c577ed479bbe91b93dae2bbc7076a319b4328e9"
+  "server/voice.ts": "2252dc4a76c64e203578e126cb10cb5061095ba5eded00d9c3ad45166b3cc0f1",
+  "server/storage.ts": "723094fbbbbc3314fb5f0f8037e02f0b575ea2f07ea30fe8428b985ab12d8d35",
+  "server/postgres.ts": "4e86a7002af3df93d318cbd85589fac8adc8907a2318df18add0b2404bd38827"
 }

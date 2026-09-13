@@ -1,7 +1,7 @@
 import { Router, type Request } from "express";
 
 type Options = {
-  account: (req: Request) => { id: string };
+  account: (req: Request) => { id: string } | Promise<{ id: string }>;
   configuration?: () => { apiKey?: string; agentId?: string };
   request?: typeof fetch;
 };
@@ -19,13 +19,13 @@ export function voiceRouter({
     res.setHeader("Cache-Control", "no-store");
     next();
   });
-  router.get("/status", (req, res) => {
-    account(req);
+  router.get("/status", async (req, res) => {
+    await account(req);
     const { apiKey, agentId } = configuration();
     res.json({ available: Boolean(apiKey?.trim() && agentId?.trim()) });
   });
   router.post("/session", async (req, res) => {
-    const user = account(req);
+    const user = await account(req);
     const origin = req.get("origin");
     if (origin) {
       const allowed = [

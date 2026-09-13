@@ -103,3 +103,12 @@ test('backend recovery never shows connected and offline at the same time',async
   assert.equal(await page.getByText('Agent backend is offline. Start the local 2DB runtime to continue.',{exact:true}).count(),0);
  }finally{fixture.setHealth(true);await page.close();}
 });
+test('live Agent 2 renders its nested written assessment',async()=>{
+ fixture.setScenario('completed');const page=await browser.newPage({viewport:{width:1280,height:900},reducedMotion:'reduce'});
+ try {
+  await page.goto(origin);await page.locator('.ticket').first().click();await page.locator('[data-agent-detail="verify"]').waitFor();
+  await page.evaluate(()=>{selected.runs[0].agent_assessment=JSON.stringify({assessment:{status:'resolved',summary:'Independent written assessment is visible.',evidenceReferences:['D01'],unsatisfiedRequirements:[]}});render();});
+  await page.locator('[data-agent-detail="verify"] > summary').click();
+  assert.match(await page.locator('.assessment-summary').innerText(),/Independent written assessment is visible/);
+ }finally{await page.close();}
+});

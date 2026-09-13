@@ -225,10 +225,11 @@ function ticketView(t) {
 }
 function agent2Assessment(run) {
   if (!run || run.verification_mode !== "live-agent-2") return "";
-  let assessment = null;
+  let record = null;
   try {
-    assessment = run.agent_assessment ? JSON.parse(run.agent_assessment) : null;
+    record = run.agent_assessment ? JSON.parse(run.agent_assessment) : null;
   } catch {}
+  const assessment = record?.assessment || record;
   return assessment ? `<div class="assessment-summary"><h3>Agent 2 findings</h3><p>${esc(assessment.summary || "No written summary provided.")}</p><details><summary>Technical details · full assessment</summary><pre>${esc(JSON.stringify(assessment, null, 2))}</pre></details></div>` : "";
 }
 function evidenceView(p, run) {

@@ -2,7 +2,9 @@
 
 **Two agents. One reproducible bug.**
 
-Milestone 2 adds a separate local control application. Loop Market remains intact, including all three original intentional defects. Milestone 3 adds the separate Agent 1 integration described in [AGENT-1.md](AGENT-1.md). Live Agent 2, GitHub PR creation, merge, and deployment remain unimplemented. This guide retains the original developer-fixture workflow; the Agent 1 guide documents Docker, API-key setup, live investigation, and generated-candidate verification.
+The current live Agent 2 and scripted Agent 1 workflows are documented in [AGENT-2.md](AGENT-2.md). It includes persisted mode labels, private `TWO_DB_AGENT_2_MODEL` setup, exact PowerShell windows, Docker setup, dashboard actions, and current limitations.
+
+Milestone 2 adds a separate local control application. Loop Market remains intact, including all three original intentional defects. Milestone 3 adds the separate Agent 1 integration described in [AGENT-1.md](AGENT-1.md). The current milestone adds live Agent 2 and an explicit scripted Agent 1 demonstration. GitHub PR creation, merge, and deployment remain unimplemented. This guide retains the original developer-fixture workflow.
 
 ## PowerShell setup and startup
 

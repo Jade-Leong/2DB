@@ -660,7 +660,7 @@ export class AgentService {
       requirements = JSON.stringify(discountRequirements),
       timestamp = now();
     this.store.db
-      .prepare("INSERT INTO proposals VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+      .prepare("INSERT INTO proposals(id,ticket_id,kind,base_revision,candidate_revision,requirements,requirements_hash,harness_hash,diff,explanation,state,revision_number,current_approval,last_run,created_at,updated_at,investigation_origin) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
       .run(
         id,
         run.ticket_id,
@@ -678,6 +678,7 @@ export class AgentService {
         null,
         timestamp,
         timestamp,
+        "live-agent-1",
       );
     this.store.db.prepare("INSERT INTO agent_candidates VALUES(?,?,?,?,?)").run(
       id,

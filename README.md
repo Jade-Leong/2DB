@@ -2,7 +2,13 @@
 
 A fictional local shopping marketplace for **2DB — Two agents. One reproducible bug.**
 
-The customer website preserves three intentional application defects for investigation. All purchases and funds are simulated; no real payment information is requested. Milestone 2 adds a separate local engineer review application under `control/`. Milestone 3 adds a Codex SDK Agent 1 integration gated by worker authentication and actual Linux-container isolation. Live Agent 2, GitHub PR integration, merging, and deployment remain unimplemented.
+The customer website preserves three intentional application defects for investigation. All purchases and funds are simulated; no real payment information is requested. The separate 2DB controller under `control/` now includes live Agent 1, an explicitly labeled scripted Agent 1 demonstration, live Agent 2, and scripted verification. GitHub PR integration, merging, and deployment remain unimplemented.
+
+## Agent 2 and scripted demonstration
+
+The discount scenario supports three explicit paths: live Agent 1 to live Agent 2, scripted Agent 1 demonstration to live Agent 2, or a fully scripted rehearsal with no model calls. Modes are persisted and displayed; a live failure never silently falls back. See [the Agent 2 operating guide](control/AGENT-2.md) for exact PowerShell setup, private credential entry, terminal windows, dashboard steps, checks, and limitations.
+
+The scripted demonstration performs a real Docker browser checkout and records fresh evidence before loading a developer-authored candidate. Live Agent 2 uses the official TypeScript OpenAI Agents SDK with restricted browser/evidence tools after all mandatory Playwright checks. The controller calculates the final state. The paid-order-history and photo scenarios remain known unresolved and are not marked ready.
 
 ## Milestone 3: Agent 1 investigation
 
@@ -148,4 +154,4 @@ The server stores integer cents, snapshots item titles/prices at purchase time, 
 
 Do not give future investigator agents this conversation, `operator/`, test reports, or the builder's answer key. Use a fresh, restricted workspace containing only `src/`, `server/`, `public/`, `package.json`, `package-lock.json`, `tsconfig.json`, `vite.config.ts`, `index.html`, `.gitignore`, and `INVESTIGATOR_SETUP.md`. Rename the latter to `README.md` there. Do not copy this operator-oriented README. Give Agent 1 only the selected customer complaint and intended behavior. The independent acceptance suite stays under the operator's control for Agent 2's sandbox verification.
 
-The 2DB human approval boundaries are recorded privately under `operator/WORKFLOW.md`. Milestone 2 implements local engineer approval and scripted verification in `control/`; Agent 1 is now implemented behind the milestone-3 setup/isolation gate; live Agent 2 and GitHub PR integration remain unimplemented.
+The 2DB human approval boundaries are recorded privately under `operator/WORKFLOW.md`. Milestone 2 implements local engineer approval and scripted verification in `control/`; Agent 1 is implemented behind the milestone-3 setup/isolation gate; live Agent 2 is implemented with mandatory checks and exact-revision approval. A live Agent 2 run has not yet been demonstrated, and GitHub PR integration remains unimplemented.

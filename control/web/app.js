@@ -88,7 +88,7 @@ ${
               .join("")
           : '<div class="empty small">No submitted complaints yet.<br><br>Open Loop Market → Support, submit a complaint, then refresh this inbox.</div>'
       }<div class="section-title proposals-title"><h2>Local proposals</h2><span>${proposals.length}</span></div>${proposals.map((x) => `<button class="proposal-link ${p?.id === x.id ? "chosen" : ""}" data-action="proposal" data-id="${x.id}"><strong>${x.kind === "agent-generated" ? "Agent-generated proposal" : x.kind === "discount-fix" ? "Discount sample fix" : "Unchanged negative control"}</strong><small>${esc(x.customer_name)} · ${short(x.candidate_revision)}</small>${badge(x.state)}</button>`).join("") || '<p class="muted small">Choose a ticket to create a developer-authored sample proposal.</p>'}</section><div class="detail-column">${researchPanel()}${t ? ticketView(t) + agentView(t) : welcome()}${p ? proposalView(p) : t ? `<section class="panel"><span class="eyebrow">DEVELOPER-AUTHORED DEMO AREA</span><h2>Create a local change proposal</h2><p class="muted">These developer-authored fixtures are separate demonstrations. A failed live investigation never falls back to a fixture.</p><div class="actions"><button data-action="create" data-kind="discount-fix" data-id="${esc(t.id)}">Use discount sample fix</button><button class="secondary" data-action="create" data-kind="unchanged" data-id="${esc(t.id)}">Use unchanged negative control</button></div></section>` : ""}${testSummary ? `<details class="panel"><summary>Controller automated demonstration · explicit test-engineer session</summary><p class="muted small">Separate test tickets and controller data. These test approvals do not approve any dashboard proposal.</p><pre>${esc(JSON.stringify(testSummary, null, 2))}</pre></details>` : ""}</div></div>`
-} </main><footer><span>2db / One builds. One verifies.</span><span>Local workspace · Live Agent 2 is not connected.</span></footer></div></div>`;
+} </main><footer><span>2db / One builds. One verifies.</span><span>Local workspace · Live and scripted modes are recorded separately.</span></footer></div></div>`;
   const brand = root.querySelector(".logo");
   brand.setAttribute("aria-label", "2db home");
   brand.innerHTML = '<img src="/logo-reference.png" alt="2DB — Find it. Verify it.">';
@@ -104,8 +104,8 @@ function proposalView(p) {
   const latest = p.runs[0],
     approval = p.approvals.find((a) => a.id === p.current_approval),
     waiting = p.state === "Awaiting engineer approval",
-    running = p.state === "Verification running";
-  return `<section class="panel"><div class="section-title"><div><span class="eyebrow">LOCAL CHANGE PROPOSAL</span><h2>${p.kind === "agent-generated" ? "Agent-generated proposed fix" : p.kind === "discount-fix" ? "Discount payment correction" : "Unchanged negative control"}</h2></div>${badge(p.state)}</div><div class="author-label">${esc(p.author)} · Revision ${p.revision_number}</div><p>${esc(p.explanation)}</p>${p.agentMetadata ? `<details><summary>Agent explanation, source references, and uncertainties</summary><p><strong>Expected behavior:</strong> ${esc(p.agentMetadata.expected)}</p><pre>${esc(JSON.stringify(p.agentMetadata.conclusion, null, 2))}</pre><p class="small muted">Agent explanation is not proof of correctness. Trusted reproduction evidence is available in the investigation panel above.</p></details>` : ""}<div class="hash-grid">${hashLabel("BASE SNAPSHOT · SHA-256", p.base_revision)}${hashLabel("CANDIDATE SNAPSHOT · SHA-256", p.candidate_revision)}</div><details class="technical"><summary>Frozen requirements and harness identity</summary>${hashLabel("REQUIREMENTS", p.requirements_hash)}${hashLabel("TRUSTED HARNESS", p.harness_hash)}</details><div class="diff-title"><span>Source diff</span><span>${p.kind === "agent-generated" ? "Controller-computed source diff" : "Reviewed developer fixture"}</span></div><pre class="diff">${p.diff
+    running = ["Verification running", "Live Agent 2 running"].includes(p.state);
+  return `<section class="panel"><div class="section-title"><div><span class="eyebrow">LOCAL CHANGE PROPOSAL</span><h2>${p.kind === "agent-generated" ? "Agent-generated proposed fix" : p.kind === "discount-fix" ? "Discount payment correction" : "Unchanged negative control"}</h2></div>${badge(p.state)}</div><div class="author-label">${esc(p.author)} · Revision ${p.revision_number}</div><div class="mode-strip"><strong>Investigation origin:</strong> ${badge(p.investigationOrigin)} <strong>Verification:</strong> ${badge(p.execution)}</div><p>${esc(p.explanation)}</p>${p.agentMetadata ? `<details><summary>Agent explanation, source references, and uncertainties</summary><p><strong>Expected behavior:</strong> ${esc(p.agentMetadata.expected)}</p><pre>${esc(JSON.stringify(p.agentMetadata.conclusion, null, 2))}</pre><p class="small muted">Agent explanation is not proof of correctness. Trusted reproduction evidence is available in the investigation panel above.</p></details>` : ""}<div class="hash-grid">${hashLabel("BASE SNAPSHOT · SHA-256", p.base_revision)}${hashLabel("CANDIDATE SNAPSHOT · SHA-256", p.candidate_revision)}</div><details class="technical"><summary>Frozen requirements and harness identity</summary>${hashLabel("REQUIREMENTS", p.requirements_hash)}${hashLabel("TRUSTED HARNESS", p.harness_hash)}</details><div class="diff-title"><span>Source diff</span><span>${p.kind === "agent-generated" ? "Controller-computed source diff" : "Reviewed developer fixture"}</span></div><pre class="diff">${p.diff
     .split("\n")
     .map(
       (line) =>
@@ -113,7 +113,15 @@ function proposalView(p) {
     )
     .join(
       "",
-    )}</pre><details ${p.kind === "agent-generated" ? "hidden" : ""}><summary>Reproduction workflow</summary><p>Use Maya, add the $48 knit to the bag, enter LOOP20, then inspect the receipt and the server-recorded payment. Do not rely on the independently broken order-history page.</p><p class="small muted">${latest ? "Measured evidence appears below." : "No measured reproduction evidence yet. Approval allows the scripted baseline and candidate runs to gather it."}</p></details><div class="revision-tools" ${p.kind === "agent-generated" ? "hidden" : ""}><label>Choose another reviewed fixture<select id="fixture" ${running ? "disabled" : ""}><option value="discount-fix" ${p.kind === "discount-fix" ? "selected" : ""}>Developer-authored discount fix</option><option value="unchanged" ${p.kind === "unchanged" ? "selected" : ""}>Unchanged negative control</option></select></label><button class="secondary" data-action="revision" ${running ? "disabled" : ""}>Replace candidate revision</button></div><p class="small muted">Changing the candidate invalidates approval and previous evidence for this proposal.</p></section><section class="panel gate"><span class="eyebrow">HUMAN APPROVAL GATE</span><h2>Your revision. Your decision.</h2><p class="muted">Testing permission is recorded against the full candidate hash above. It is not permission to merge or deploy.</p>${approval ? `<div class="approval-record">Approved by ${esc(approval.reviewer)} · ${date(approval.created_at)}<code>${esc(approval.revision)}</code></div>` : ""}<div class="actions">${["Proposal ready", "Changes requested"].includes(p.state) ? '<button data-action="submit">Submit revision for engineer approval</button>' : ""}<button data-action="approve" ${!waiting || busy ? "disabled" : ""}>Approve this revision for testing</button><button class="secondary" data-action="changes" ${running ? "disabled" : ""}>Request changes</button><button class="danger" data-action="reject" ${running ? "disabled" : ""}>Reject proposal</button></div><label class="review-note">Review note (optional)<textarea id="review-note" rows="2" maxlength="2000" placeholder="Explain a change request or rejection."></textarea></label><div class="verify-row"><div><strong>Baseline → Approved candidate</strong><p class="small muted">Serial builds and tests. Separate disposable copies and databases.</p></div><button data-action="verify" ${!approval || running || busy ? "disabled" : ""}>${running ? "Verification running…" : "Run scripted verification →"}</button></div><p class="small muted">Stop Loop Market with Ctrl+C before verification. Port 3001 must be free; 2DB remains running on its own port.</p></section>${researchCitationsView(p.agentMetadata?.research)}${evidenceView(p, latest)}<section class="panel"><div class="section-title"><h2>Activity history</h2><span class="small muted">Persisted timestamps</span></div><ol class="timeline">${p.activity.map((e) => `<li><span class="dot"></span><div><strong>${esc(e.event)}</strong><p>${esc(e.details)}</p><small>${esc(e.actor)} · ${date(e.created_at)}</small></div></li>`).join("")}</ol></section>`;
+    )}</pre><details ${p.kind === "agent-generated" ? "hidden" : ""}><summary>Reproduction workflow</summary><p>Use Maya, add the $48 knit to the bag, enter LOOP20, then inspect the receipt and the server-recorded payment. Do not rely on the independently broken order-history page.</p><p class="small muted">${latest ? "Measured evidence appears below." : "No measured reproduction evidence yet. Approval allows the scripted baseline and candidate runs to gather it."}</p></details><div class="revision-tools" ${p.kind === "agent-generated" ? "hidden" : ""}><label>Choose another reviewed fixture<select id="fixture" ${running ? "disabled" : ""}><option value="discount-fix" ${p.kind === "discount-fix" ? "selected" : ""}>Developer-authored discount fix</option><option value="unchanged" ${p.kind === "unchanged" ? "selected" : ""}>Unchanged negative control</option></select></label><button class="secondary" data-action="revision" ${running ? "disabled" : ""}>Replace candidate revision</button></div><p class="small muted">Changing the candidate invalidates approval and previous evidence for this proposal.</p></section><section class="panel gate"><span class="eyebrow">HUMAN APPROVAL GATE</span><h2>Your revision. Your decision.</h2><p class="muted">Testing permission is recorded against the full candidate hash above. It is not permission to merge or deploy.</p>${approval ? `<div class="approval-record">Approved by ${esc(approval.reviewer)} · ${date(approval.created_at)}<code>${esc(approval.revision)}</code></div>` : ""}<div class="actions">${["Proposal ready", "Changes requested"].includes(p.state) ? '<button data-action="submit">Submit revision for engineer approval</button>' : ""}<button data-action="approve" ${!waiting || busy ? "disabled" : ""}>Approve this revision for testing</button><button class="secondary" data-action="changes" ${running ? "disabled" : ""}>Request changes</button><button class="danger" data-action="reject" ${running ? "disabled" : ""}>Reject proposal</button></div><label class="review-note">Review note (optional)<textarea id="review-note" rows="2" maxlength="2000" placeholder="Explain a change request or rejection."></textarea></label><div class="verify-row"><div><strong>Independent verification</strong><p class="small muted">Both paths run all eight trusted checks. Live Agent 2 adds fresh model-guided browser exploration.</p></div><div class="actions"><button data-action="verify-live" ${!approval || running || busy || agent2Status?.state !== "Ready" ? "disabled" : ""}>${running ? "Verification running…" : "Verify with live Agent 2"}</button><button class="secondary" data-action="verify" ${!approval || running || busy ? "disabled" : ""}>Run scripted verification only</button>${latest?.state === "Live Agent 2 running" ? `<button class="danger" data-action="cancel-agent2" data-id="${esc(latest.id)}">Cancel Agent 2</button>` : ""}</div></div><p class="small muted">Stop Loop Market with Ctrl+C before verification. Port 3001 must be free; 2DB remains running on its own port.</p></section>${researchCitationsView(p.agentMetadata?.research)}${evidenceView(p, latest)}<section class="panel"><div class="section-title"><h2>Activity history</h2><span class="small muted">Persisted timestamps</span></div><ol class="timeline">${p.activity.map((e) => `<li><span class="dot"></span><div><strong>${esc(e.event)}</strong><p>${esc(e.details)}</p><small>${esc(e.actor)} · ${date(e.created_at)}</small></div></li>`).join("")}</ol></section>`;
+}
+function agent2Assessment(run) {
+  if (!run || run.verification_mode !== "live-agent-2") return "";
+  let assessment = null;
+  try {
+    assessment = run.agent_assessment ? JSON.parse(run.agent_assessment) : null;
+  } catch {}
+  return `<details ${assessment ? "open" : ""}><summary>Live Agent 2 written assessment</summary><pre>${esc(JSON.stringify(assessment, null, 2))}</pre><p class="small muted">The AI assessment is separate from the executed checks and controller-calculated workflow status.</p></details>`;
 }
 function evidenceView(p, run) {
   const current =
@@ -125,7 +133,7 @@ function evidenceView(p, run) {
   const evidence = current ? run.evidence : null,
     base = evidence?.baseline?.required?.assessment,
     candidate = evidence?.candidate?.required?.assessment;
-  return `<section class="panel"><div class="section-title"><div><span class="eyebrow">SCRIPTED VERIFICATION</span><h2>Evidence, side by side.</h2></div>${run ? badge(current ? run.state : "Stale evidence — approval or revision changed") : badge("Not run")}</div>${run ? `<p class="run-message">${esc(current ? run.message || "Executing the trusted Playwright harness…" : "This evidence is archived and cannot verify the current revision.")}</p><p class="small muted">Run ${esc(run.id)}<br>${date(run.started_at)} → ${date(run.finished_at)}</p>` : '<p class="muted">Approval is required before independent candidate verification can start.</p>'}<div class="table-scroll"><table><thead><tr><th>Required check</th><th>Baseline</th><th>Candidate</th></tr></thead><tbody>${p.requirements
+  return `<section class="panel"><div class="section-title"><div><span class="eyebrow">${run?.verification_mode === "live-agent-2" ? "LIVE AGENT 2 + MANDATORY SCRIPTED CHECKS" : "SCRIPTED VERIFICATION ONLY"}</span><h2>Evidence, side by side.</h2></div>${run ? badge(current ? run.state : "Stale evidence — approval or revision changed") : badge("Not run")}</div>${run ? `<p class="run-message">${esc(current ? run.message || "Executing the trusted Playwright harness…" : "This evidence is archived and cannot verify the current revision.")}</p><p class="small muted">Run ${esc(run.id)} · ${esc(run.verification_mode || "scripted-verification")}<br>${date(run.started_at)} → ${date(run.finished_at)}</p>` : '<p class="muted">Approval is required before independent candidate verification can start.</p>'}${agent2Assessment(run)}<div class="table-scroll"><table><thead><tr><th>Required check</th><th>Baseline</th><th>Candidate</th></tr></thead><tbody>${p.requirements
     .map((r) => {
       const b = base?.checks.find((x) => x.id === r.id),
         c = candidate?.checks.find((x) => x.id === r.id);
@@ -230,6 +238,21 @@ root.addEventListener("click", async (event) => {
         {},
       );
       await refresh();
+    } else if (action === "scripted-demo") {
+      busy = true;
+      render();
+      scriptedInvestigation = await api(
+        "/tickets/" + el.dataset.id + "/scripted-demo",
+        { kind: document.getElementById("scripted-kind").value },
+      );
+      notice = "Scripted Agent 1 demonstration started. It makes no model calls.";
+      await refresh();
+    } else if (action === "cancel-scripted-demo") {
+      scriptedInvestigation = await api(
+        "/scripted-investigations/" + el.dataset.id + "/cancel",
+        {},
+      );
+      await refresh();
     } else if (action === "cancel-investigation") {
       investigation = await api(
         "/investigations/" + el.dataset.id + "/cancel",
@@ -255,6 +278,12 @@ root.addEventListener("click", async (event) => {
         await api(`/proposals/${id}/verify`, {});
         notice =
           "Scripted verification started. The dashboard will update as each environment finishes.";
+      } else if (action === "verify-live") {
+        await api(`/proposals/${id}/verify-live`, {});
+        notice = "Live Agent 2 started. Mandatory scripted checks run before its independent browser exploration.";
+      } else if (action === "cancel-agent2") {
+        await api(`/agent2/${el.dataset.id}/cancel`, {});
+        notice = "Agent 2 cancellation requested.";
       } else if (action === "submit")
         selected = await api(`/proposals/${id}/submit`, {});
       await refresh();
@@ -273,8 +302,9 @@ refresh().catch((e) => {
 setInterval(() => {
   if (
     token &&
-    (selected?.state === "Verification running" ||
-      investigations.some((r) => !r.finished_at))
+    (["Verification running", "Live Agent 2 running"].includes(selected?.state) ||
+      investigations.some((r) => !r.finished_at) ||
+      scriptedInvestigations.some((r) => !r.finished_at))
   )
     refresh().catch((e) => {
       error = e.message;

@@ -522,6 +522,16 @@ blockquote {
   padding: 5px 8px;
   margin: 10px 0 17px;
 }
+.mode-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0.8rem 0;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
 .hash-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

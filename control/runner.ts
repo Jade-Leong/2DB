@@ -109,7 +109,10 @@ export class Runner {
   active = false;
   isolatedImage?: string;
   constructor(public store: Store) {}
-  async start(proposalId: string) {
+  async start(
+    proposalId: string,
+    verificationMode: "scripted-verification" | "live-agent-2" = "scripted-verification",
+  ) {
     if (this.active)
       problem(
         "A sequential verification is already running. Wait for it to finish.",
@@ -118,7 +121,7 @@ export class Runner {
     const p = this.store.proposal(proposalId),
       approval = this.store.approvalFor(p);
     this.active = true;
-    if (p.kind === "agent-generated") {
+    if (p.kind === "agent-generated" || verificationMode === "live-agent-2") {
       try {
         const { probeIsolation } = await import("./agent/docker");
         const readiness = await probeIsolation();
@@ -154,7 +157,7 @@ export class Runner {
     const runId = randomUUID();
     this.store.db
       .prepare(
-        "INSERT INTO runs(id,proposal_id,approval_id,candidate_revision,base_revision,requirements_hash,harness_hash,revision_number,state,started_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO runs(id,proposal_id,approval_id,candidate_revision,base_revision,requirements_hash,harness_hash,revision_number,state,started_at,verification_mode) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
       )
       .run(
         runId,
@@ -167,6 +170,7 @@ export class Runner {
         p.revision_number,
         "Verification running",
         now(),
+        verificationMode,
       );
     this.store.db
       .prepare(
@@ -176,9 +180,9 @@ export class Runner {
     this.store.event(
       p.ticket_id,
       p.id,
-      "Scripted verification",
+      verificationMode === "live-agent-2" ? "Agent 2" : "Scripted verification",
       "Verification running",
-      { runId, approval: approval.id, revision: p.candidate_revision },
+      { runId, approval: approval.id, revision: p.candidate_revision, verificationMode },
     );
     void this.perform(runId)
       .catch((error) => {
@@ -195,7 +199,7 @@ export class Runner {
         this.store.event(
           p.ticket_id,
           p.id,
-          "Scripted verification",
+          verificationMode === "live-agent-2" ? "Agent 2" : "Scripted verification",
           "Inconclusive",
           String(error.message),
         );
@@ -203,7 +207,7 @@ export class Runner {
       .finally(() => {
         this.active = false;
       });
-    return { runId, state: "Verification running" };
+    return { runId, state: "Verification running", verificationMode };
   }
   async environment(
     run: any,
@@ -211,7 +215,10 @@ export class Runner {
     source: string,
     expectedRevision: string,
   ) {
-    if (this.store.proposal(run.proposal_id).kind === "agent-generated") {
+    if (
+      this.store.proposal(run.proposal_id).kind === "agent-generated" ||
+      run.verification_mode === "live-agent-2"
+    ) {
       if (!this.isolatedImage)
         throw new Error(
           "Generated code requires an isolated runner. Host execution refused.",
@@ -359,13 +366,19 @@ export class Runner {
       approval = this.store.db
         .prepare("SELECT * FROM approvals WHERE id=?")
         .get(run.approval_id);
-    const state = finalDecision(current, approval, run, evidence),
+    const scriptedDecision = finalDecision(current, approval, run, evidence),
+      state = run.verification_mode === "live-agent-2" && scriptedDecision === "Verified awaiting engineer review"
+        ? "Live Agent 2 running"
+        : scriptedDecision,
       message =
-        state === "Verified awaiting engineer review"
+        state === "Live Agent 2 running"
+          ? "Scripted checks passed. Live Agent 2 is gathering independent browser evidence."
+          : state === "Verified awaiting engineer review"
           ? "Discount fix verified in local test environment — awaiting engineer review."
           : state === "Failed"
             ? "Required discount checks failed. Approval did not imply a passing result."
             : "Evidence is incomplete, stale, or the baseline did not reproduce the complaint. Review run logs.";
+    evidence.scriptedDecision = scriptedDecision;
     this.store.db
       .prepare(
         "UPDATE runs SET state=?,finished_at=?,evidence=?,message=? WHERE id=?",
@@ -374,7 +387,7 @@ export class Runner {
     this.store.db
       .prepare("UPDATE proposals SET state=?,updated_at=? WHERE id=?")
       .run(state, now(), p.id);
-    this.store.event(p.ticket_id, p.id, "Scripted verification", state, {
+    this.store.event(p.ticket_id, p.id, run.verification_mode === "live-agent-2" ? "Agent 2" : "Scripted verification", state, {
       runId: id,
       message,
     });

@@ -13,6 +13,8 @@ import { Runner } from "./runner";
 import { controlRoot, defaultData, problem } from "./paths";
 import type { FixtureKind } from "./snapshots";
 import { AgentService, setupStatus } from "./agent/service";
+import { Agent2Service, agent2Status } from "./agent2";
+import { ScriptedDemoService } from "./scripted-demo";
 import { checkTavily, tavilyStatus } from "./agent/tavily";
 import { createAccountAuth, mountAccountRoutes, type AccountAuth, type AccountIdentity } from "./accounts";
 
@@ -23,6 +25,7 @@ export function createControl(
     ticketSource?: string;
     remoteTickets?: () => Promise<any[]>;
     agentStatus?: typeof setupStatus;
+    agent2Status?: typeof agent2Status;
     researchCheck?: typeof checkTavily;
     accountAuth?: AccountAuth;
   } = {},
@@ -31,12 +34,16 @@ export function createControl(
     runner = new Runner(store);
   store.remoteTickets = options.remoteTickets;
   const agent = new AgentService(store, options.agentStatus);
+  const scriptedDemo = new ScriptedDemoService(store);
+  const agent2 = new Agent2Service(store, runner, options.agent2Status);
   let researchCheckRunning = false;
   let researchCheckAt = 0;
   let researchCheckResult: Awaited<ReturnType<typeof checkTavily>> | null =
     null;
   let statusCache:
     { at: number; value: Awaited<ReturnType<typeof setupStatus>> } | undefined;
+  let agent2StatusCache:
+    { at: number; value: Awaited<ReturnType<typeof agent2Status>> } | undefined;
   const privateDir = options.privateDir ?? path.join(controlRoot, "private");
   mkdirSync(privateDir, { recursive: true });
   const keyFile = path.join(privateDir, "engineer-key.json");
@@ -146,6 +153,11 @@ export function createControl(
       statusCache = { at: Date.now(), value: await agent.statusCheck() };
     res.json(statusCache.value);
   });
+  app.get("/engineer-api/agent2/status", async (_req, res) => {
+    if (!agent2StatusCache || Date.now() - agent2StatusCache.at > 30_000)
+      agent2StatusCache = { at: Date.now(), value: await agent2.statusCheck() };
+    res.json(agent2StatusCache.value);
+  });
   app.get("/engineer-api/investigations", (_req, res) =>
     res.json(agent.list()),
   );
@@ -157,6 +169,18 @@ export function createControl(
   );
   app.post("/engineer-api/investigations/:id/cancel", (req, res) =>
     res.json(agent.cancel(String(req.params.id))),
+  );
+  app.get("/engineer-api/scripted-investigations", (req, res) =>
+    res.json(scriptedDemo.list(req.query.ticketId ? String(req.query.ticketId) : undefined)),
+  );
+  app.post("/engineer-api/tickets/:id/scripted-demo", async (req, res) =>
+    res.status(202).json(await scriptedDemo.start(String(req.params.id), req.body.kind as FixtureKind)),
+  );
+  app.post("/engineer-api/scripted-investigations/:id/cancel", (req, res) =>
+    res.json(scriptedDemo.cancel(String(req.params.id))),
+  );
+  app.get("/engineer-api/scripted-investigations/:id/evidence/:name", (req, res) =>
+    res.sendFile(scriptedDemo.artifact(String(req.params.id), String(req.params.name))),
   );
   app.get("/engineer-api/investigations/:id/evidence/:name", (req, res) =>
     res.sendFile(
@@ -220,7 +244,16 @@ export function createControl(
     ),
   );
   app.post("/engineer-api/proposals/:id/verify", async (req, res) =>
-    res.status(202).json(await runner.start(String(req.params.id))),
+    res.status(202).json(await runner.start(String(req.params.id), "scripted-verification")),
+  );
+  app.post("/engineer-api/proposals/:id/verify-live", async (req, res) =>
+    res.status(202).json(await agent2.start(String(req.params.id))),
+  );
+  app.post("/engineer-api/agent2/:runId/cancel", (req, res) =>
+    res.json(agent2.cancel(String(req.params.runId))),
+  );
+  app.get("/engineer-api/agent2/:runId/evidence/:name", (req, res) =>
+    res.sendFile(agent2.artifact(String(req.params.runId), String(req.params.name))),
   );
   app.get(
     "/engineer-api/artifact/:runId/:environment/:group/:name",
@@ -305,5 +338,5 @@ export function createControl(
           : "Controller operation failed. See the local terminal.",
       }),
   );
-  return { app, store, runner, agent, keyFile };
+  return { app, store, runner, agent, agent2, scriptedDemo, keyFile };
 }

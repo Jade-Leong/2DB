@@ -120,11 +120,13 @@ test("installed official ESM-only SDK is detected without invoking a model", asy
 test("customer headers cannot start, view, cancel, or approve investigations", async () => {
   for (const [route, body] of [
     ["/tickets/complaint/investigate", {}],
+    ["/tickets/complaint/scripted-demo", { kind: "discount-fix" }],
     ["/investigations", undefined],
     ["/research/status", undefined],
     ["/research/check", {}],
     ["/investigations/missing/cancel", {}],
     ["/proposals/missing/approve", { revision: "fake", role: "engineer" }],
+    ["/proposals/missing/verify-live", {}],
   ] as const)
     assert.equal((await request(route, body, false)).status, 401);
 });

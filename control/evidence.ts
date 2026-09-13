@@ -141,7 +141,8 @@ export function finalDecision(
   )
     return "Inconclusive";
   if (
-    !knownComplete(evidence.baseline, {
+    run.verification_mode !== "live-agent-2" &&
+    (!knownComplete(evidence.baseline, {
       runId: run.id,
       revision: run.base_revision,
       harness: run.harness_hash,
@@ -150,7 +151,7 @@ export function finalDecision(
       runId: run.id,
       revision: run.candidate_revision,
       harness: run.harness_hash,
-    })
+    }))
   )
     return "Inconclusive";
   const base = assessRequired(

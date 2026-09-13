@@ -91,7 +91,10 @@ export async function isolatedEnvironment(
         writeFileSync(path.join(evidenceRoot, step + ".log"), output);
       }
     }
-    for (const project of ["required", "known-unresolved"]) {
+    const projects = run.verification_mode === "live-agent-2"
+      ? ["required"]
+      : ["required", "known-unresolved"];
+    for (const project of projects) {
       const dir = path.join(evidenceRoot, project);
       mkdirSync(dir, { recursive: true });
       let report = null,
@@ -147,6 +150,8 @@ export async function isolatedEnvironment(
           harness: run.harness_hash,
         });
     }
+    if (run.verification_mode === "live-agent-2")
+      result.known = { exitCode: null, report: null, skippedReason: "Known unresolved scenarios are outside this ticket's live verification gate." };
     result.sourceUnchanged = revision(root) === expectedRevision;
     writeFileSync(
       path.join(evidenceRoot, "summary.json"),

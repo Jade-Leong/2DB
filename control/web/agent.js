@@ -1,17 +1,23 @@
 // Dashboard receives public run summaries and trusted evidence; never worker credentials.
 let researchStatus = null;
 let agentStatus = null,
+  agent2Status = null,
   investigations = [],
-  investigation = null;
+  investigation = null,
+  scriptedInvestigations = [],
+  scriptedInvestigation = null;
 async function refreshAgent() {
-  [agentStatus, investigations, researchStatus] = await Promise.all([
+  [agentStatus, agent2Status, investigations, scriptedInvestigations, researchStatus] = await Promise.all([
     api("/agent/status"),
+    api("/agent2/status"),
     api("/investigations"),
+    api("/scripted-investigations"),
     api("/research/status"),
   ]);
   const t = selected?.ticket || ticket;
   const latest = investigations.find((r) => r.ticket_id === t?.id);
   investigation = latest ? await api("/investigations/" + latest.id) : null;
+  scriptedInvestigation = scriptedInvestigations.find((r) => r.ticket_id === t?.id) || null;
 }
 function agentView(t) {
   const run = investigation?.ticket_id === t?.id ? investigation : null;
@@ -42,6 +48,17 @@ function agentView(t) {
             .join("")}</details>`
         : ""
     }
+  </section>${scriptedAgent1View(t)}`;
+}
+
+function scriptedAgent1View(t) {
+  const run = scriptedInvestigation?.ticket_id === t.id ? scriptedInvestigation : null;
+  const active = scriptedInvestigations.some((item) => !item.finished_at);
+  return `<section class="panel live-agent"><div class="section-title"><div><span class="eyebrow">AGENT 1 · SCRIPTED DEMONSTRATION</span><h2>Real browser evidence, prepared proposal.</h2></div>${badge(run?.state || "Ready")}</div>
+    <p class="muted">This explicit fallback performs real browser steps in Docker and loads a developer-authored fixture. It makes no model calls and is never presented as autonomous discovery.</p>
+    <label>Prepared candidate<select id="scripted-kind" ${active || busy ? "disabled" : ""}><option value="discount-fix">Prepared discount fix</option><option value="unchanged">Unchanged negative control</option></select></label>
+    <div class="actions"><button data-action="scripted-demo" data-id="${esc(t.id)}" ${active || busy ? "disabled" : ""}>Use scripted demo</button>${run && !run.finished_at ? `<button class="danger" data-action="cancel-scripted-demo" data-id="${esc(run.id)}">Cancel demo</button>` : ""}</div>
+    ${run ? `<div class="run-message">${badge(run.state)}<p>${esc(run.message)}</p><small>${date(run.started_at)} → ${date(run.finished_at)} · ${esc(run.id)} · 0 model calls</small></div>${run.proposal_id ? `<button data-action="proposal" data-id="${esc(run.proposal_id)}">Review scripted proposal →</button>` : ""}<details><summary>Actual scripted actions</summary><ol class="timeline">${run.events.map((e) => `<li><span class="dot"></span><div><strong>${esc(e.state)}</strong><p>${esc(e.message)}</p><small>${date(e.at)}</small></div></li>`).join("")}</ol></details><details><summary>Fresh reproduction evidence (${run.evidence.length})</summary>${run.evidence.map((e) => `<p class="small">Order ${esc(e.orderCents)} / payment ${esc(e.paymentCents)} cents<br><button class="text" data-artifact="/scripted-investigations/${run.id}/evidence/${e.screenshot}">Screenshot</button><button class="text" data-artifact="/scripted-investigations/${run.id}/evidence/${e.record}">Observed values</button></p>`).join("")}</details>` : ""}
   </section>`;
 }
 

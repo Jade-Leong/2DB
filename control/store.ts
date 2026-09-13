@@ -33,8 +33,11 @@ export class Store {
    CREATE TABLE IF NOT EXISTS approvals(id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL REFERENCES proposals(id), reviewer TEXT NOT NULL, revision TEXT NOT NULL, base_revision TEXT NOT NULL, requirements_hash TEXT NOT NULL, harness_hash TEXT NOT NULL, revision_number INTEGER NOT NULL, created_at TEXT NOT NULL, invalidated_at TEXT);
    CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,proposal_id TEXT NOT NULL REFERENCES proposals(id), approval_id TEXT NOT NULL, candidate_revision TEXT NOT NULL, base_revision TEXT NOT NULL, requirements_hash TEXT NOT NULL, harness_hash TEXT NOT NULL, revision_number INTEGER NOT NULL, state TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT, evidence TEXT, message TEXT);
    CREATE TABLE IF NOT EXISTS activity(id INTEGER PRIMARY KEY,ticket_id TEXT NOT NULL,proposal_id TEXT,actor TEXT NOT NULL,event TEXT NOT NULL,details TEXT NOT NULL,created_at TEXT NOT NULL);`);
+    this.ensureColumn("proposals", "investigation_origin", "TEXT NOT NULL DEFAULT 'developer-fixture'");
+    this.ensureColumn("runs", "verification_mode", "TEXT NOT NULL DEFAULT 'scripted-verification'");
+    this.ensureColumn("runs", "agent_assessment", "TEXT");
     const interrupted = this.db
-      .prepare("SELECT * FROM runs WHERE state='Verification running'")
+      .prepare("SELECT * FROM runs WHERE state IN ('Verification running','Live Agent 2 running')")
       .all() as any[];
     for (const run of interrupted) {
       this.db
@@ -59,6 +62,11 @@ export class Store {
         "Previous process did not finish.",
       );
     }
+  }
+  private ensureColumn(table: string, name: string, definition: string) {
+    const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as any[];
+    if (!columns.some((column) => column.name === name))
+      this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
   }
   inbox(): any[] {
     if (!existsSync(this.ticketSource)) return [];
@@ -153,7 +161,11 @@ export class Store {
     if (!row) problem("Proposal not found.", 404);
     return row;
   }
-  create(ticketId: string, kind: FixtureKind) {
+  create(
+    ticketId: string,
+    kind: FixtureKind,
+    investigationOrigin = "developer-fixture",
+  ) {
     this.importTicket(ticketId);
     assertFixtures(this.fixtures);
     const f = selectedFixture(this.fixtures, kind),
@@ -161,7 +173,7 @@ export class Store {
       timestamp = now(),
       requirements = JSON.stringify(discountRequirements);
     this.db
-      .prepare("INSERT INTO proposals VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+      .prepare("INSERT INTO proposals(id,ticket_id,kind,base_revision,candidate_revision,requirements,requirements_hash,harness_hash,diff,explanation,state,revision_number,current_approval,last_run,created_at,updated_at,investigation_origin) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
       .run(
         id,
         ticketId,
@@ -183,10 +195,15 @@ export class Store {
         null,
         timestamp,
         timestamp,
+        investigationOrigin,
       );
-    this.event(ticketId, id, "Developer-authored fixture", "Proposal ready", {
+    const actor = investigationOrigin === "scripted-agent-1"
+      ? "Scripted investigation"
+      : "Developer-authored fixture";
+    this.event(ticketId, id, actor, "Proposal ready", {
       kind,
       revision: f.revision,
+      investigationOrigin,
     });
     return this.detail(id);
   }
@@ -377,6 +394,7 @@ export class Store {
     if (
       ![
         "Approved for testing",
+        "Live Agent 2 running",
         "Failed",
         "Inconclusive",
         "Verified awaiting engineer review",
@@ -420,14 +438,24 @@ export class Store {
       author:
         p.kind === "agent-generated"
           ? "Agent-generated"
-          : "Developer-authored sample",
+          : p.investigation_origin === "scripted-agent-1"
+            ? "Scripted investigation + developer-authored proposal"
+            : "Developer-authored sample",
+      investigationOrigin:
+        p.kind === "agent-generated" || p.investigation_origin === "live-agent-1"
+          ? "Live Agent 1"
+          : p.investigation_origin === "scripted-agent-1"
+            ? "Scripted investigation + developer-authored proposal"
+            : "Developer-authored fixture",
       investigation:
         p.kind === "agent-generated" ? this.agentCandidate(id).run_id : null,
       agentMetadata:
         p.kind === "agent-generated"
           ? JSON.parse(this.agentCandidate(id).evidence)
           : null,
-      execution: "Scripted Playwright verification",
+      execution: runs[0]?.verification_mode === "live-agent-2"
+        ? "Live Agent 2 + mandatory scripted verification"
+        : "Scripted verification only",
     };
   }
   list() {

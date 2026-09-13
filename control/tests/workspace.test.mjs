@@ -21,6 +21,7 @@ for(const scenario of scenarios) test(`workspace ${scenario}: truthful actions, 
   if(scenario==='proposal-ready') assert.equal(await page.getByRole('button',{name:'Start Agent 2 →',exact:true}).isEnabled(),true);
   if(scenario==='approved') assert.equal(await page.getByRole('button',{name:'Start Agent 2 →'}).isEnabled(),true);
   if(scenario==='verification-running') assert.equal(await page.getByRole('button',{name:'Cancel verification'}).isVisible(),true);
+  if(['failed','inconclusive'].includes(scenario)) assert.equal(await page.getByRole('button',{name:'Retry Agent 2 →',exact:true}).isEnabled(),true);
   if(scenario==='completed') {await page.getByRole('button',{name:'Review and approve →'}).click();assert.equal(await page.getByRole('button',{name:'Approve',exact:true}).isVisible(),true);}
   if(scenario==='approved-queue') {await page.getByRole('button',{name:'Approved',exact:true}).click();assert.equal(await page.locator('.ticket').count(),1);assert.match(await page.locator('.next-heading').innerText(),/Approved for human PR work/);}
   if (await page.locator('[data-agent-detail="build"]').getAttribute('open') === null) await page.locator('[data-agent-detail="build"] > summary').click();

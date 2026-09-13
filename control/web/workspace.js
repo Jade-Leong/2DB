@@ -75,6 +75,9 @@ function nextAction(t, run, p) {
   } else if (p && approval && p.state === "Authorized for verification") {
     heading = "Ready for independent verification"; message = agent2Status?.state === "Ready" ? `Revision ${p.revision_number} is approved. Agent 2 can now test it.` : "Agent 2 is unavailable. Refresh to check its connection.";
     action = `<button class="primary" data-action="verify-live" ${busy || agent2Status?.state !== "Ready" ? "disabled" : ""}>Start Agent 2 →</button>`;
+  } else if (p && ["Failed", "Inconclusive"].includes(p.state)) {
+    heading = "Agent 2 needs review"; message = p.runs?.[0]?.message || "Review the findings or run Agent 2 again on this revision.";
+    action = `<button class="primary" data-action="verify-live" ${busy || agent2Status?.state !== "Ready" ? "disabled" : ""}>Retry Agent 2 →</button>`;
   } else if (reviewedByAgent2(p) && p.state !== "Approved") {
     heading = "Ready for human approval"; message = "Review Agent 2’s findings, then approve this revision for the human PR queue.";
     action = '<button class="primary" data-action="open-review">Review and approve →</button>';

@@ -1,3 +1,8 @@
+import {
+  safeRequest,
+  resolveElement,
+  assertSafeElement,
+} from "./safe-actions.mjs";
 import { chromium } from "@playwright/test";
 import { createInterface } from "node:readline";
 import { observePage } from "./observation.mjs";
@@ -7,11 +12,20 @@ const context = await browser.newContext({
   serviceWorkers: "block",
   acceptDownloads: false,
 });
-await context.route("**/*", (route) =>
-  new URL(route.request().url()).origin === origin
+let safeOnly = true;
+let blockedMutation = false;
+await context.route("**/*", (route) => {
+  if (
+    safeOnly &&
+    !safeRequest(route.request().method(), route.request().url(), origin)
+  ) {
+    blockedMutation = true;
+    return route.abort();
+  }
+  return new URL(route.request().url()).origin === origin
     ? route.continue()
-    : route.abort(),
-);
+    : route.abort();
+});
 await context.routeWebSocket(/.*/, (ws) => ws.close());
 const page = await context.newPage();
 page.setDefaultTimeout(8000);
@@ -53,6 +67,8 @@ const send = (value) => process.stdout.write(JSON.stringify(value) + "\n");
 for await (const line of createInterface({ input: process.stdin })) {
   try {
     const a = JSON.parse(line);
+    safeOnly = a.safeOnly === true;
+    blockedMutation = false;
     if (a.action === "init") {
       if (!["buyer-maya", "buyer-jamie"].includes(a.buyer))
         throw new Error("Unsupported affected synthetic buyer");
@@ -72,22 +88,16 @@ for await (const line of createInterface({ input: process.stdin })) {
         throw new Error("Assigned marketplace only");
       await page.goto(destination.href);
     } else if (["click", "fill", "select"].includes(a.action)) {
-      const selector = a.target;
-      if (
-        typeof selector !== "string" ||
-        selector.length > 300 ||
-        !currentSelectors.has(selector)
-      )
-        throw new Error(
-          "Use an exact selector from the latest browser observation",
-        );
+      if (typeof a.target !== "string" || a.target.length > 300)
+        throw new Error("Invalid target");
+      const element = await resolveElement(page, a.target, currentSelectors);
+      if (safeOnly) await assertSafeElement(element, a.action, origin);
       const totalElement = page.getByTestId("checkout-total");
       const total = (await totalElement.count())
         ? await totalElement.textContent()
         : null;
       if (total && /^\$\d+\.\d{2}$/.test(total.trim()))
         displayedCents = Math.round(Number(total.replace("$", "")) * 100);
-      const element = page.locator(selector);
       if (a.action === "click") await element.click();
       if (a.action === "fill") await element.fill(a.value);
       if (a.action === "select") {
@@ -103,6 +113,7 @@ for await (const line of createInterface({ input: process.stdin })) {
       throw new Error("Unsupported browser action");
     await page.waitForLoadState("networkidle");
     await Promise.all([...pending]);
+    if (blockedMutation) throw new Error("Batch attempted a guarded request");
     const screenshot = (await page.screenshot({ fullPage: true })).toString(
       "base64",
     );

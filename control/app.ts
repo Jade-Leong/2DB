@@ -95,7 +95,7 @@ export function createControl(
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Vary", "Origin");
       res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Demo-Account");
-      res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
     }
     if (req.method === "OPTIONS") {
       if (!origin || !allowedOrigins.has(origin)) { res.status(403).json({ error: "Cross-origin controller requests are not allowed." }); return; }

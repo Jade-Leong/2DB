@@ -175,6 +175,19 @@ test("cross-origin account mutations are rejected", async () => {
   );
   assert.equal(result.status, 403);
 });
+test("allowed dashboard origins can preflight ticket deletion", async () => {
+  const response = await fetch(origin + "/engineer-api/tickets/example-ticket", {
+    method: "OPTIONS",
+    headers: {
+      Origin: origin,
+      "Access-Control-Request-Method": "DELETE",
+      "Access-Control-Request-Headers": "authorization,content-type",
+    },
+  });
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get("access-control-allow-origin"), origin);
+  assert.match(response.headers.get("access-control-allow-methods") || "", /(?:^|,\s*)DELETE(?:,|$)/);
+});
 test("account approval queues only an exact live-reviewed revision with verified reviewer attribution", async () => {
   const login = await post("/auth-api/login", {
     email: "engineer@example.test",
